@@ -3,5 +3,5 @@
 *.user
 *.suo
 *.vscode/
-bin/
-obj/
+**/bin/
+**/obj/

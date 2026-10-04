@@ -1,0 +1,159 @@
+Sample Codes/structure (reference only, from my previous project)
+
+﻿using Dapper;
+using Inventory.DataTransferObject.Product;
+using Inventory.Interfaces;
+using Inventory.Models;
+using Microsoft.CodeAnalysis;
+using Microsoft.Data.SqlClient;
+using System;
+using System.Collections.Generic;
+using System.Data;
+using System.Linq;
+
+namespace Inventory.DataAccess
+{
+    public class ProductRepository : IProductRepository
+    {
+        private readonly string _connectionString;
+
+        public ProductRepository(IConfiguration configuration)
+        {
+            _connectionString = configuration.GetConnectionString("DefaultConnection")
+                                ?? throw new ArgumentNullException(nameof(configuration), "Connection string cannot be null.");
+        }
+
+        #region Products Table 
+        public List<Product> GetProductsTable(ProductFilterDto filter)
+        {
+            using (var conn = new SqlConnection(_connectionString))
+            {
+                try
+                {
+                    conn.Open();
+                    var param = new DynamicParameters();
+                    param.Add("@SearchProduct", filter.SearchProductDto);
+                    param.Add("@DateFrom", filter.FilterDateFromDto);
+                    param.Add("@DateTo", filter.FilterDateToDto);
+                    var result = conn.Query<Product>("ProductsTable_Select", param, commandType: CommandType.StoredProcedure);
+                    conn.Close();
+                    List<Product> list = result.ToList();
+                    return list;
+                }
+                catch (Exception)
+                {
+                    return new List<Product>();
+                }
+            }
+        }
+        #endregion
+
+        #region New Product
+        public int NewProduct(ProductInsertDto input)
+        {
+            using (var conn = new SqlConnection(_connectionString))
+            {
+                try
+                {
+                    conn.Open();
+                    var param = new DynamicParameters();
+                    param.Add("@ProductName", input.ProductName);
+                    param.Add("@Description", input.ProductDescription);
+                    param.Add("@Price", input.ProductPrice);
+                    param.Add("@StockQuantity", input.ProductStockQty);
+                    var result = conn.Query<int>("Product_Insert", param, commandType: CommandType.StoredProcedure);
+                    // conn.Close(); is no longer needed because the "using" statement ensures the connection is closed.
+                    return result.FirstOrDefault();
+                }
+                catch (Exception)
+                {
+                    return 0;
+                }
+            }
+        }
+        #endregion
+
+        #region Update Product
+        public int UpdateProduct(ProductUpdateDto input)
+        {
+            using (var conn = new SqlConnection(_connectionString))
+            {
+                try
+                {
+                    conn.Open();
+                    var param = new DynamicParameters();
+                    param.Add("@ProductID", input.ProductID);
+                    param.Add("@ProductName", input.ProductName);
+                    param.Add("@Description", input.ProductDescription);
+                    param.Add("@Price", input.ProductPrice);
+                    param.Add("@StockQuantity", input.ProductStockQty);
+                    var result = conn.Query<int>("Product_Update", param, commandType: CommandType.StoredProcedure);
+                    return result.FirstOrDefault();
+                }
+                catch (Exception)
+                {
+                    return 0;
+                }
+            }
+        }
+        #endregion
+
+        #region Delete Product
+        public int DeleteProduct(ProductDeleteDto input)
+        {
+            using (var conn = new SqlConnection(_connectionString))
+            {
+                try
+                {
+                    conn.Open();
+                    var param = new DynamicParameters();
+                    param.Add("@ProductID", input.ProductID);
+                    int isProductDeleted = conn.Execute("Product_Delete", param, commandType: CommandType.StoredProcedure);
+                    return isProductDeleted;
+                }
+                catch (Exception)
+                {
+                    return 0;
+                }
+            }
+        }
+        #endregion region
+
+        #region Dev
+        public int TestData()
+        {
+            using (var conn = new SqlConnection(_connectionString))
+            {
+                try
+                {
+                    conn.Open();
+                    var testData = conn.Execute("Products_Test_Data", commandType: CommandType.StoredProcedure);
+                    return testData;
+                }
+                catch (Exception)
+                {
+                    return 0;
+                }
+            }
+        }
+
+        public int ClearData()
+        {
+            using (var conn = new SqlConnection(_connectionString))
+            {
+                try
+                {
+                    conn.Open();
+                    int clearData = conn.Execute("Products_Clear_Data", commandType: CommandType.StoredProcedure);
+                    return clearData;
+                }
+                catch (Exception)
+                {
+                    return 0;
+                }
+
+            }
+        }
+        #endregion
+    }
+}

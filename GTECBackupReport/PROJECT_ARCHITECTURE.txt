@@ -1,0 +1,97 @@
+﻿GTEC BACKUP MONITORING — SOLUTION ARCHITECTURE
+Version: 1.0
+Status: agreed working structure; implement features incrementally.
+
+PURPOSE
+Keep the ASP.NET Core web project focused on HTTP/UI concerns. Place database calls, business rules, and application workflows in their own projects. The database is accessed through stored procedures using Dapper; SQL query text must not be embedded in application source code.
+
+SOLUTION PROJECTS AND RESPONSIBILITIES
+
+1) GTECBackupReport — Web / presentation layer
+- ASP.NET Core MVC host.
+- Contains Controllers and Views for HTTP routes and HTML rendering.
+- Controllers bind and validate request DTOs, call Service interfaces, and return views or JSON responses.
+- Keep controllers thin: no SQL, Dapper, database rules, or business calculations.
+- Keep browser code under wwwroot/scripts. AJAX requests and page interactions live there; do not grow inline script blocks in Razor views.
+- Shared styling and static images remain in wwwroot/css and wwwroot/images as appropriate.
+- Program.cs is limited to host configuration and dependency registration.
+- Use anti-forgery validation on state-changing POST requests. AJAX POSTs send the anti-forgery token.
+- Downloads are a future capability and must have authorization checks before implementation.
+
+2) Service — application/use-case layer
+- Coordinates application actions such as searching reports, applying report filters, updating a backup record, and requesting a scan.
+- Exposes service interfaces for controllers and implementations for each use case/domain area.
+- Owns HTTP/application request and response DTOs under Service/Contracts/Requests and Service/Contracts/Responses. These are transport shapes, not database entities.
+- Validates request values and calls Business abstractions. Maps Business models to response DTOs.
+- Does not contain SQL, Dapper calls, or ASP.NET MVC concerns.
+- Async methods accept CancellationToken where useful and propagate it to lower layers.
+
+3) Business — domain and business rules
+- Owns domain/business models under Business/Models. Examples: BackupSource, BackupRecord, BackupSchedule, BackupStatus, and report criteria/value objects.
+- Owns repository or gateway interfaces that the business/use-case logic needs, under Business/Interfaces (or a consistent Abstractions folder).
+- Owns rules for expected schedules, matching backups to sources/dates, duplicate identity, and Working / No Backup / Scanner Error status semantics.
+- Must not depend on ASP.NET, Dapper, SQL Server, or the web project.
+
+4) DataAccess — persistence/integration layer
+- Implements the abstractions declared by Business.
+- Uses Dapper and Microsoft.Data.SqlClient to call SQL Server stored procedures only.
+- Keep repository classes in DataAccess/Repositories and connection/registration code in focused infrastructure folders.
+- Use CommandType.StoredProcedure and named parameters. Store procedure names as constants where helpful.
+- No inline SELECT/INSERT/UPDATE/DELETE query strings in C# source. Stored procedure definitions belong in version-controlled database scripts outside application C# (for example, a Database/StoredProcedures folder).
+- Use async calls, cancellation, disposed connections, and transactions for multi-step writes.
+- Do not swallow exceptions and return fake empty/zero success values. Log at the appropriate boundary and preserve actionable failures.
+- Keep database row mapping separate from web request/response DTOs when shapes differ.
+
+DEPENDENCY DIRECTION
+- Business has no project dependency on the other layers.
+- Service depends on Business abstractions and models.
+- DataAccess depends on Business to implement its abstractions.
+- The web host references Service and DataAccess only to compose the application through registration extensions; it calls Service APIs at runtime.
+- No dependency from Business or DataAccess back to the web project.
+
+REQUEST FLOW
+
+Browser / wwwroot/scripts AJAX
+    -> MVC Controller (Web)
+    -> Request DTO (Service/Contracts/Requests)
+    -> Application Service (Service)
+    -> Business rules and repository abstraction (Business)
+    -> Dapper repository implementation (DataAccess)
+    -> SQL Server stored procedure
+
+The response follows the reverse path. Controllers return a view or a consistent JSON response; browser notifications use SweetAlert2.
+
+POST REQUEST CONVENTIONS
+- Use dedicated request DTOs in Service/Contracts/Requests. Example: UpdateBackupRecordRequest, BackupReportFilterRequest, or ManageBackupSourceRequest.
+- Use response DTOs in Service/Contracts/Responses. Example: BackupReportResponse and BackupRecordResponse.
+- Do not bind a database model directly from an untrusted browser form.
+- Apply validation to the request DTO and enforce business rules again in the Service/Business layer.
+- Protect MVC POST actions with ValidateAntiForgeryToken. Include the token in AJAX POST headers or form data.
+- Return a predictable response shape, such as { success, message, data, errors }, with suitable HTTP status codes.
+- The Service translates application outcomes into response data; controllers translate those outcomes to HTTP.
+
+SWEETALERT2 AND BROWSER SCRIPTS
+- SweetAlert2 is vendored locally under wwwroot/lib/sweetalert2 so the internal site does not depend on a public CDN at runtime.
+- Put shared notification and confirmation helpers in wwwroot/scripts (for example backup-alerts.js).
+- Show success/error messages after server responses and confirmation prompts before destructive actions.
+- Confirmation is only a UI aid; the server still validates authorization and input.
+- Keep AJAX code in feature-specific files under wwwroot/scripts, loaded by the relevant Razor view or shared layout.
+
+FEATURE REFERENCE
+- Plan.md (repository parent) is the broad product brief for the backup monitoring application.
+- BACKUP_MONITORING_SITE_PLAN.txt in the web project is the working feature/UI plan; update it when feature decisions change.
+- SampleCode.txt is the Dapper/stored-procedure style reference. Preserve the stored-procedure-only requirement while improving safety, async use, and error handling.
+- Newer direct instructions from the project owner override these notes. If the documents conflict, flag the conflict and follow the latest explicit instruction.
+
+INITIAL UI REPORT FIELDS FROM THE PRODUCT PLAN
+Day, Date, Database / Backup Source, File Name / Format, Status, with the mapping color marker beside Database / Backup Source, and Actions only where permitted. Keep backup/detected timestamps in record details, not table columns. The database/source column stays because daily expected records must also represent missing backups.
+
+
+IMPLEMENTATION RULES
+- Work in the existing solution and its existing project boundaries. The main GTECBackupReport project is for Controllers, Views, host composition, and static web assets; avoid moving data/business code into it.
+- Add new files to the layer that owns them rather than growing a single controller or project.
+- Keep changes small enough to review and keep the plan documents in sync with settled decisions.
+- Do not include real credentials, server paths, or backup data in source control.
+
+
+
