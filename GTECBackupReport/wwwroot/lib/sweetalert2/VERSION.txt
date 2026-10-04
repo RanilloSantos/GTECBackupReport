@@ -1,0 +1,1 @@
+SweetAlert2 v11.26.25; locally vendored from https://cdn.jsdelivr.net/npm/sweetalert2@11.26.25/dist/; MIT license in LICENSE.txt.
