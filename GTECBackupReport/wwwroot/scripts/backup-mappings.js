@@ -5,6 +5,8 @@
         { id: "gtec", name: "GTEC", patterns: "GTEC_backup*", folder: "", color: "gtec", schedule: "Daily", active: true }
     ];
     const storageKey = "gtec-backup-database-mappings";
+    const formatStorageKey = "gtec-backup-file-formats";
+    const defaultFormats = [".bak", ".archive", ".zip"];
     const escapeHtml = value => String(value).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;", "'": "&#39;" }[c]));
     const load = () => {
         try {
@@ -14,14 +16,25 @@
         return defaults.map(item => ({ ...item }));
     };
     let mappings = load();
-    const save = next => {
-        try { localStorage.setItem(storageKey, JSON.stringify(next)); }
-        catch { window.BackupAlerts.error("Could not save mappings", "Browser storage is unavailable."); return false; }
-        mappings = next;
-        window.dispatchEvent(new CustomEvent("backup:mappings-changed", { detail: mappings }));
-        return true;
+    const loadFormats = () => {
+        try {
+            const stored = JSON.parse(localStorage.getItem(formatStorageKey));
+            if (Array.isArray(stored)) return stored;
+        } catch { /* Use the built-in examples when browser storage is unavailable. */ }
+        return defaultFormats.map(extension => ({ extension, active: true }));
     };
-    const escapePattern = pattern => pattern.split("*").map(part => part.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join(".*");
+    let formats = loadFormats();
+    const save = (nextMappings, nextFormats) => {
+        try {
+            localStorage.setItem(storageKey, JSON.stringify(nextMappings));
+            localStorage.setItem(formatStorageKey, JSON.stringify(nextFormats));
+        } catch { window.BackupAlerts.error("Could not save settings", "Browser storage is unavailable."); return false; }
+        mappings = nextMappings;
+        formats = nextFormats;
+        window.dispatchEvent(new CustomEvent("backup:mappings-changed", { detail: mappings }));
+        window.dispatchEvent(new CustomEvent("backup:formats-changed", { detail: formats }));
+        return true;
+    };    const escapePattern = pattern => pattern.split("*").map(part => part.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join(".*");
     const matches = (filename, pattern) => {
         try { return new RegExp(`^${escapePattern(pattern.trim())}$`, "i").test(filename); }
         catch { return false; }
@@ -36,16 +49,28 @@
         return { mapping: mappings.find(mapping => mapping.name === expectedName) || null, ambiguous: false };
     };
     const modalMarkup = () => `
-        <p class="mapping-note">Map database names to filename patterns. A match gives the report row its database label and marker color.</p>
-        <input class="mapping-search" id="mapping-search" type="search" placeholder="Search mappings by name or pattern" aria-label="Search mappings">
-        <div class="mapping-list" id="mapping-list"></div>
-        <button class="mapping-add" id="mapping-new" type="button">Add database mapping</button>
-        <p class="mapping-storage-note">Prototype storage: mappings stay in this browser. They are not shared with other users until server settings are connected.</p>`;
-    const openSettings = async () => {
+        <nav class="settings-tabs" role="tablist" aria-label="Backup settings">
+            <button class="settings-tab active" type="button" role="tab" aria-selected="true" aria-controls="mappings-panel" data-settings-tab="mappings">Database mappings</button>
+            <button class="settings-tab" type="button" role="tab" aria-selected="false" aria-controls="formats-panel" data-settings-tab="formats">File formats</button>
+        </nav>
+        <section class="settings-panel" id="mappings-panel" role="tabpanel" data-settings-panel="mappings">
+            <p class="mapping-note">Map database names to filename patterns. A match gives each report row its database label and marker color.</p>
+            <input class="mapping-search" id="mapping-search" type="search" placeholder="Search mappings by name or pattern" aria-label="Search mappings">
+            <div class="mapping-list" id="mapping-list"></div>
+            <button class="mapping-add" id="mapping-new" type="button">Add database mapping</button>
+            <p class="mapping-storage-note">Database mappings are currently saved in this browser only.</p>
+        </section>
+        <section class="settings-panel" id="formats-panel" role="tabpanel" data-settings-panel="formats" hidden>
+            <p class="mapping-note">Choose which filename extensions the report recognizes. Active formats appear in the File format filter.</p>
+            <form class="format-add-form" id="format-add-form"><label for="format-new-input">Add a file extension</label><div><input id="format-new-input" type="text" placeholder="For example: .bak or .tar.gz" autocomplete="off"><button class="mapping-add" type="submit">Add format</button></div><small id="format-error" role="status"></small></form>
+            <div class="format-list" id="format-list"></div>
+            <p class="mapping-storage-note">File formats are currently saved in this browser only.</p>
+        </section>`;    const openSettings = async () => {
         const draft = mappings.map(item => ({ ...item }));
+        const formatDraft = formats.map(item => ({ ...item }));
         const result = await Swal.fire({
-            title: "Database file mappings", html: modalMarkup(), width: 760,
-            showCancelButton: true, confirmButtonText: "Save mappings", cancelButtonText: "Cancel", focusConfirm: false,
+            title: "Backup settings", html: modalMarkup(), width: 760,
+            showCancelButton: true, confirmButtonText: "Save settings", cancelButtonText: "Cancel", focusConfirm: false,
             didOpen: popup => {
                 const $ = id => popup.querySelector(`#${id}`);
                 const list = $("mapping-list"), search = $("mapping-search");
@@ -102,16 +127,52 @@
                         });
                     }));
                 };
-                search.addEventListener("input", renderList);
+                const formatList = $("format-list"), formatForm = $("format-add-form"), formatInput = $("format-new-input"), formatError = $("format-error");
+                const renderFormats = () => {
+                    formatList.innerHTML = formatDraft.length ? formatDraft.map(item => `<div class="format-row"><div><strong>${escapeHtml(item.extension)}</strong><small>${item.active ? "Included in monitored formats" : "Not shown in the filter"}</small></div><label><input type="checkbox" data-format-toggle="${escapeHtml(item.extension)}" ${item.active ? "checked" : ""}> Monitor</label><button class="mapping-delete" type="button" data-format-delete="${escapeHtml(item.extension)}">Remove</button></div>`).join("") : `<p class="mapping-note">No file formats configured yet.</p>`;
+                    formatList.querySelectorAll("[data-format-toggle]").forEach(input => input.addEventListener("change", () => {
+                        const item = formatDraft.find(entry => entry.extension === input.dataset.formatToggle); if (!item) return;
+                        item.active = input.checked; renderFormats();
+                    }));
+                    formatList.querySelectorAll("[data-format-delete]").forEach(button => button.addEventListener("click", () => {
+                        const item = formatDraft.find(entry => entry.extension === button.dataset.formatDelete); if (!item) return;
+                        const backdrop = document.createElement("div");
+                        backdrop.className = "mapping-editor-backdrop mapping-delete-backdrop";
+                        backdrop.innerHTML = '<section class="mapping-editor mapping-delete-dialog" role="dialog" aria-modal="true"><span class="mapping-delete-icon">!</span><h3>Remove this file format?</h3><p><strong>' + escapeHtml(item.extension) + '</strong> will be removed from the monitored formats when you save settings.</p><div class="mapping-editor-actions"><button type="button" class="mapping-cancel">Keep format</button><button type="button" class="mapping-confirm-delete">Remove format</button></div></section>';
+                        popup.appendChild(backdrop);
+                        const close = () => backdrop.remove();
+                        backdrop.querySelector(".mapping-cancel").addEventListener("click", close);
+                        backdrop.addEventListener("click", event => { if (event.target === backdrop) close(); });
+                        backdrop.querySelector(".mapping-confirm-delete").addEventListener("click", () => {
+                            formatDraft.splice(formatDraft.findIndex(entry => entry.extension === item.extension), 1);
+                            close(); renderFormats();
+                        });
+                    }));
+                };
+                formatForm.addEventListener("submit", event => {
+                    event.preventDefault();
+                    let extension = formatInput.value.trim().toLowerCase();
+                    if (extension && !extension.startsWith(".")) extension = "." + extension;
+                    if (!/^\.[a-z0-9][a-z0-9._+-]*$/i.test(extension)) { formatError.textContent = "Enter an extension such as .bak or .tar.gz."; return; }
+                    if (formatDraft.some(item => item.extension.toLowerCase() === extension)) { formatError.textContent = "That extension is already configured."; return; }
+                    formatDraft.push({ extension, active: true });
+                    formatInput.value = ""; formatError.textContent = ""; renderFormats(); formatInput.focus();
+                });
+                popup.querySelectorAll("[data-settings-tab]").forEach(tab => tab.addEventListener("click", () => {
+                    const active = tab.dataset.settingsTab;
+                    popup.querySelectorAll("[data-settings-tab]").forEach(item => { const selected = item === tab; item.classList.toggle("active", selected); item.setAttribute("aria-selected", String(selected)); });
+                    popup.querySelectorAll("[data-settings-panel]").forEach(panel => { panel.hidden = panel.dataset.settingsPanel !== active; });
+                }));                search.addEventListener("input", renderList);
                 $("mapping-new").addEventListener("click", () => openEditor());
                 renderList();
+                renderFormats();
             },
-            preConfirm: () => save(draft) || false
+            preConfirm: () => save(draft, formatDraft) || false
         });
-        if (result.isConfirmed) window.BackupAlerts.success("Mappings saved", "These settings are saved in this browser.");
+        if (result.isConfirmed) window.BackupAlerts.success("Settings saved", "These settings are saved in this browser.");
         return result;
     };
-    window.BackupMappingStore = { getAll: () => mappings.map(item => ({ ...item })), resolve, openSettings };
+    window.BackupMappingStore = { getAll: () => mappings.map(item => ({ ...item })), getFormats: () => formats.map(item => ({ ...item })), resolve, openSettings };
     document.addEventListener("DOMContentLoaded", () => document.getElementById("mapping-settings")?.addEventListener("click", openSettings));
 })();
 

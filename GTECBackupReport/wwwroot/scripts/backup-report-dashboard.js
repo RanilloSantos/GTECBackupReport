@@ -99,7 +99,11 @@
         ui.source.innerHTML=`<option value="">All databases</option>${options}<option value="Unmapped">Unmapped</option>`;
         ui.source.value=[...ui.source.options].some(option=>option.value===current)?current:"";
     };
-    document.querySelectorAll("[data-period]").forEach(button=>button.addEventListener("click",()=>{
+    const refreshFormatOptions=()=>{
+        const current=ui.format.value, options=window.BackupMappingStore.getFormats().filter(item=>item.active).map(item=>`<option value="${esc(item.extension)}">${esc(item.extension)}</option>`).join("");
+        ui.format.innerHTML=`<option value="">All formats</option>${options}`;
+        ui.format.value=[...ui.format.options].some(option=>option.value===current)?current:"";
+    };    document.querySelectorAll("[data-period]").forEach(button=>button.addEventListener("click",()=>{
         state.period=button.dataset.period;state.page=1;
         document.querySelectorAll("[data-period]").forEach(item=>item.classList.toggle("active",item===button));
         ui.range.hidden=state.period!=="custom";
@@ -125,7 +129,8 @@
     $("print-report").addEventListener("click",()=>{state.printing=true;render();window.print();});
     window.addEventListener("afterprint",()=>{state.printing=false;render();});
     window.addEventListener("backup:mappings-changed",()=>{refreshSourceOptions();state.page=1;render();});
-    refreshSourceOptions();render();
+    window.addEventListener("backup:formats-changed",()=>{refreshFormatOptions();state.page=1;render();});
+    refreshSourceOptions();refreshFormatOptions();render();
 })();
 
 
