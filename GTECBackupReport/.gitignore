@@ -5,3 +5,6 @@
 *.vscode/
 **/bin/
 **/obj/
+/Business/
+/DataAccess/
+/Service/obj/
