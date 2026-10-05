@@ -6,6 +6,7 @@
     ];
     const storageKey = "gtec-backup-database-mappings";
     const formatStorageKey = "gtec-backup-file-formats";
+    const targetDirectoryStorageKey = "gtec-backup-target-directory";
     const defaultFormats = [".bak", ".archive", ".zip"];
     const escapeHtml = value => String(value).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;", "'": "&#39;" }[c]));
     const load = () => {
@@ -24,17 +25,23 @@
         return defaultFormats.map(extension => ({ extension, active: true }));
     };
     let formats = loadFormats();
-    const save = (nextMappings, nextFormats) => {
+    const loadTargetDirectory = () => { try { return localStorage.getItem(targetDirectoryStorageKey) || ""; } catch { return ""; } };
+    let targetDirectory = loadTargetDirectory();
+    const save = (nextMappings, nextFormats, nextTargetDirectory) => {
         try {
             localStorage.setItem(storageKey, JSON.stringify(nextMappings));
             localStorage.setItem(formatStorageKey, JSON.stringify(nextFormats));
+            localStorage.setItem(targetDirectoryStorageKey, nextTargetDirectory);
         } catch { window.BackupAlerts.error("Could not save settings", "Browser storage is unavailable."); return false; }
         mappings = nextMappings;
         formats = nextFormats;
+        targetDirectory = nextTargetDirectory;
         window.dispatchEvent(new CustomEvent("backup:mappings-changed", { detail: mappings }));
         window.dispatchEvent(new CustomEvent("backup:formats-changed", { detail: formats }));
+        window.dispatchEvent(new CustomEvent("backup:directory-changed", { detail: targetDirectory }));
         return true;
-    };    const escapePattern = pattern => pattern.split("*").map(part => part.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join(".*");
+    };
+    const escapePattern = pattern => pattern.split("*").map(part => part.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join(".*");
     const matches = (filename, pattern) => {
         try { return new RegExp(`^${escapePattern(pattern.trim())}$`, "i").test(filename); }
         catch { return false; }
@@ -50,10 +57,16 @@
     };
     const modalMarkup = () => `
         <nav class="settings-tabs" role="tablist" aria-label="Backup settings">
-            <button class="settings-tab active" type="button" role="tab" aria-selected="true" aria-controls="mappings-panel" data-settings-tab="mappings">Database mappings</button>
+            <button class="settings-tab active" type="button" role="tab" aria-selected="true" aria-controls="directory-panel" data-settings-tab="directory">Target directory</button>
+            <button class="settings-tab" type="button" role="tab" aria-selected="false" aria-controls="mappings-panel" data-settings-tab="mappings">Database mappings</button>
             <button class="settings-tab" type="button" role="tab" aria-selected="false" aria-controls="formats-panel" data-settings-tab="formats">File formats</button>
         </nav>
-        <section class="settings-panel" id="mappings-panel" role="tabpanel" data-settings-panel="mappings">
+        <section class="settings-panel directory-panel" id="directory-panel" role="tabpanel" data-settings-panel="directory">
+            <p class="mapping-note">Choose the server directory that contains your backup files. The scanner includes files in all subfolders.</p>
+            <div class="directory-settings-form"><label for="target-directory-path">Target directory path</label><input id="target-directory-path" type="text" placeholder="For example: D:\\BackupFiles or \\\\server\\share\\Backups" autocomplete="off" spellcheck="false"><small>Enter an absolute path that the web server account can read. File names and metadata are read; file contents are not.</small></div>
+            <p class="mapping-storage-note">The path is saved in this browser for now. The folder scan runs on the web server after you save settings.</p>
+        </section>
+        <section class="settings-panel" id="mappings-panel" hidden role="tabpanel" data-settings-panel="mappings">
             <p class="mapping-note">Map database names to filename patterns. A match gives each report row its database label and marker color.</p>
             <input class="mapping-search" id="mapping-search" type="search" placeholder="Search mappings by name or pattern" aria-label="Search mappings">
             <div class="mapping-list" id="mapping-list"></div>
@@ -65,14 +78,18 @@
             <form class="format-add-form" id="format-add-form"><label for="format-new-input">Add a file extension</label><div><input id="format-new-input" type="text" placeholder="For example: .bak or .tar.gz" autocomplete="off"><button class="mapping-add" type="submit">Add format</button></div><small id="format-error" role="status"></small></form>
             <div class="format-list" id="format-list"></div>
             <p class="mapping-storage-note">File formats are currently saved in this browser only.</p>
-        </section>`;    const openSettings = async () => {
+        </section>`;
+    const openSettings = async () => {
         const draft = mappings.map(item => ({ ...item }));
         const formatDraft = formats.map(item => ({ ...item }));
+        let targetDirectoryInput;
         const result = await Swal.fire({
             title: "Backup settings", html: modalMarkup(), width: 760,
             showCancelButton: true, confirmButtonText: "Save settings", cancelButtonText: "Cancel", focusConfirm: false,
             didOpen: popup => {
                 const $ = id => popup.querySelector(`#${id}`);
+                targetDirectoryInput = $("target-directory-path");
+                targetDirectoryInput.value = targetDirectory;
                 const list = $("mapping-list"), search = $("mapping-search");
                 const openEditor = (item = {}) => {
                     const backdrop = document.createElement("div");
@@ -162,17 +179,18 @@
                     const active = tab.dataset.settingsTab;
                     popup.querySelectorAll("[data-settings-tab]").forEach(item => { const selected = item === tab; item.classList.toggle("active", selected); item.setAttribute("aria-selected", String(selected)); });
                     popup.querySelectorAll("[data-settings-panel]").forEach(panel => { panel.hidden = panel.dataset.settingsPanel !== active; });
-                }));                search.addEventListener("input", renderList);
+                }));
+                search.addEventListener("input", renderList);
                 $("mapping-new").addEventListener("click", () => openEditor());
                 renderList();
                 renderFormats();
             },
-            preConfirm: () => save(draft, formatDraft) || false
+            preConfirm: () => save(draft, formatDraft, targetDirectoryInput.value.trim()) || false
         });
         if (result.isConfirmed) window.BackupAlerts.success("Settings saved", "These settings are saved in this browser.");
         return result;
     };
-    window.BackupMappingStore = { getAll: () => mappings.map(item => ({ ...item })), getFormats: () => formats.map(item => ({ ...item })), resolve, openSettings };
+    window.BackupMappingStore = { getAll: () => mappings.map(item => ({ ...item })), getFormats: () => formats.map(item => ({ ...item })), getTargetDirectory: () => targetDirectory, resolve, openSettings };
     document.addEventListener("DOMContentLoaded", () => document.getElementById("mapping-settings")?.addEventListener("click", openSettings));
 })();
 

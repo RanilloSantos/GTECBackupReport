@@ -1,3 +1,5 @@
+@using Microsoft.AspNetCore.Identity
+@inject SignInManager<IdentityUser> SignInManager
 @{ ViewData["Title"] = "Production Backup Report"; }
 <div class="backup-page" id="backup-dashboard">
 
@@ -9,13 +11,10 @@
         <h1>Production Backup Report</h1>
         <p class="subtitle">A clear view of expected backups across your environments.</p>
     </div>
-    <div class="heading-actions"><span class="preview-badge"><i></i> Sample preview</span><button class="button button-primary" id="print-report" type="button">Print report</button></div>
+    <div class="heading-actions"><button class="button button-primary" id="print-report" type="button">Print report</button></div>
 </section>
 
-<div class="preview-notice" role="note">
-    <b>i</b>
-    <span><strong>Preview data only.</strong> Example rows illustrate the report layout and do not reflect live backup status.</span>
-</div>
+
 
 <section class="summary-grid" aria-label="Report summary">
     <article class="summary-card">
@@ -45,14 +44,16 @@
         <article class="summary-card scanner">
             <span class="summary-icon">SCAN</span>
             <div><small>Scanner status</small>
-                <strong>Preview</strong>
+                <strong id="scanner-status">Not configured</strong>
             </div>
-                <em>not connected</em>
+                <em id="scanner-detail">Set a target directory</em>
     </article>
 </section>
 
 <section class="panel">
-    <header class="panel-heading"><div class="panel-title"><div class="panel-title-row"><h2>Backup records</h2><button class="icon-button" id="mapping-settings" type="button" aria-label="Database mapping settings" title="Database mappings"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 8.2a3.8 3.8 0 1 0 0 7.6 3.8 3.8 0 0 0 0-7.6Zm9 4.8v-2l-2.1-.6a7.2 7.2 0 0 0-.7-1.7l1.1-1.9-1.4-1.4-1.9 1.1a7.2 7.2 0 0 0-1.7-.7L13.7 3h-2l-.6 2.1a7.2 7.2 0 0 0-1.7.7L7.5 4.7 6.1 6.1l1.1 1.9a7.2 7.2 0 0 0-.7 1.7L4.4 10.3v2l2.1.6a7.2 7.2 0 0 0 .7 1.7l-1.1 1.9 1.4 1.4 1.9-1.1a7.2 7.2 0 0 0 1.7.7l.6 2.1h2l.6-2.1a7.2 7.2 0 0 0 1.7-.7l1.9 1.1 1.4-1.4-1.1-1.9a7.2 7.2 0 0 0 .7-1.7l2.1-.6Z"/></svg></button></div>
+    <header class="panel-heading"><div class="panel-title"><div class="panel-title-row"><h2>Backup records</h2>@if (SignInManager.IsSignedIn(User)) {
+    <button class="icon-button" id="mapping-settings" type="button" aria-label="Database mapping settings" title="Database mappings"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 8.2a3.8 3.8 0 1 0 0 7.6 3.8 3.8 0 0 0 0-7.6Zm9 4.8v-2l-2.1-.6a7.2 7.2 0 0 0-.7-1.7l1.1-1.9-1.4-1.4-1.9 1.1a7.2 7.2 0 0 0-1.7-.7L13.7 3h-2l-.6 2.1a7.2 7.2 0 0 0-1.7.7L7.5 4.7 6.1 6.1l1.1 1.9a7.2 7.2 0 0 0-.7 1.7L4.4 10.3v2l2.1.6a7.2 7.2 0 0 0 .7 1.7l-1.1 1.9 1.4 1.4 1.9-1.1a7.2 7.2 0 0 0 1.7.7l.6 2.1h2l.6-2.1a7.2 7.2 0 0 0 1.7-.7l1.9 1.1 1.4-1.4-1.1-1.9a7.2 7.2 0 0 0 .7-1.7l2.1-.6Z"/></svg></button>
+}</div>
         <p id="period-summary">Weekly report</p></div>
         <span class="count-pill" id="result-count">0 records</span>
     </header>
@@ -114,10 +115,11 @@
         <tbody id="backup-rows"></tbody>
     </table>
     <div class="empty-state" id="empty-state" hidden>
-        <b>NO RESULTS</b>
-        <h3>No backup records match</h3>
-        <p>Try another period or clear a filter.</p>
+        <b id="empty-kicker">NO RESULTS</b>
+        <h3 id="empty-title">No backup records match</h3>
+        <p id="empty-description">Try another period or clear a filter.</p>
         <button class="button button-outline" id="empty-clear" type="button">Clear filters</button>
+        @if (SignInManager.IsSignedIn(User)) { <button class="button button-outline" id="empty-open-settings" type="button">Configure target folder</button> }
     </div>
 </div>
 <footer class="table-footer"><span id="page-summary">Showing 0 records</span><div><label for="page-size">Rows</label><select id="page-size"><option>10</option><option>25</option><option>50</option></select><button id="previous-page" aria-label="Previous page" type="button">‹</button><span id="page-number">1 / 1</span><button id="next-page" aria-label="Next page" type="button">›</button></div></footer></section><p class="footnote">File presence shows that a file was detected. It does not confirm that backup contents are valid.</p></div>

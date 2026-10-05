@@ -1,0 +1,13 @@
+D:\Users\repos\Project\GTECBackupReport\Service\bin\Debug\net8.0\Service.deps.json
+D:\Users\repos\Project\GTECBackupReport\Service\bin\Debug\net8.0\Service.dll
+D:\Users\repos\Project\GTECBackupReport\Service\bin\Debug\net8.0\Service.pdb
+D:\Users\repos\Project\GTECBackupReport\Service\obj\Debug\net8.0\Service.GeneratedMSBuildEditorConfig.editorconfig
+D:\Users\repos\Project\GTECBackupReport\Service\obj\Debug\net8.0\Service.AssemblyInfoInputs.cache
+D:\Users\repos\Project\GTECBackupReport\Service\obj\Debug\net8.0\Service.AssemblyInfo.cs
+D:\Users\repos\Project\GTECBackupReport\Service\obj\Debug\net8.0\Service.csproj.CoreCompileInputs.cache
+D:\Users\repos\Project\GTECBackupReport\Service\obj\Debug\net8.0\Service.sourcelink.json
+D:\Users\repos\Project\GTECBackupReport\Service\obj\Debug\net8.0\Service.dll
+D:\Users\repos\Project\GTECBackupReport\Service\obj\Debug\net8.0\refint\Service.dll
+D:\Users\repos\Project\GTECBackupReport\Service\obj\Debug\net8.0\Service.pdb
+D:\Users\repos\Project\GTECBackupReport\Service\obj\Debug\net8.0\ref\Service.dll
+D:\Users\repos\Project\GTECBackupReport\Service\obj\Debug\net8.0\Service.csproj.Up2Date
