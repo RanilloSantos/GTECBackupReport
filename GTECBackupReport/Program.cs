@@ -1,3 +1,4 @@
+using Service.BackupMonitoring;
 using GTECBackupReport.Data;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
@@ -13,6 +14,7 @@ builder.Services.AddDatabaseDeveloperPageExceptionFilter();
 builder.Services.AddDefaultIdentity<IdentityUser>(options => options.SignIn.RequireConfirmedAccount = true)
     .AddEntityFrameworkStores<ApplicationDbContext>();
 builder.Services.AddControllersWithViews();
+builder.Services.AddSingleton<IBackupDirectoryScanner, BackupDirectoryScanner>();
 
 var app = builder.Build();
 
@@ -54,11 +56,13 @@ app.Use(async (context, next) =>
 
 app.UseRouting();
 
+app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllerRoute(
     name: "default",
     pattern: "{controller=Home}/{action=Index}/{id?}");
+app.MapControllers();
 app.MapRazorPages();
 
 app.Run();
