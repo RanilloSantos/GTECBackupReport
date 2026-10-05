@@ -7,7 +7,14 @@
     const storageKey = "gtec-backup-database-mappings";
     const formatStorageKey = "gtec-backup-file-formats";
     const targetDirectoryStorageKey = "gtec-backup-target-directory";
+    const colorStorageKey = "gtec-backup-marker-colors";
     const defaultFormats = [".bak", ".archive", ".zip"];
+    const defaultColors = [
+        { id: "onesys", name: "Blue", value: "#3287bd" },
+        { id: "gtec", name: "Green", value: "#43a077" },
+        { id: "mongo", name: "Purple", value: "#8870b1" },
+        { id: "other", name: "Gray", value: "#859297" }
+    ];
     const escapeHtml = value => String(value).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;", "'": "&#39;" }[c]));
     const load = () => {
         try {
@@ -25,17 +32,27 @@
         return defaultFormats.map(extension => ({ extension, active: true }));
     };
     let formats = loadFormats();
+    const loadColors = () => {
+        try {
+            const stored = JSON.parse(localStorage.getItem(colorStorageKey));
+            if (Array.isArray(stored) && stored.length) return stored;
+        } catch { /* Use the built-in colors when browser storage is unavailable. */ }
+        return defaultColors.map(item => ({ ...item }));
+    };
+    let colors = loadColors();
     const loadTargetDirectory = () => { try { return localStorage.getItem(targetDirectoryStorageKey) || ""; } catch { return ""; } };
     let targetDirectory = loadTargetDirectory();
-    const save = (nextMappings, nextFormats, nextTargetDirectory) => {
+    const save = (nextMappings, nextFormats, nextTargetDirectory, nextColors) => {
         try {
             localStorage.setItem(storageKey, JSON.stringify(nextMappings));
             localStorage.setItem(formatStorageKey, JSON.stringify(nextFormats));
             localStorage.setItem(targetDirectoryStorageKey, nextTargetDirectory);
+            localStorage.setItem(colorStorageKey, JSON.stringify(nextColors));
         } catch { window.BackupAlerts.error("Could not save settings", "Browser storage is unavailable."); return false; }
         mappings = nextMappings;
         formats = nextFormats;
         targetDirectory = nextTargetDirectory;
+        colors = nextColors;
         window.dispatchEvent(new CustomEvent("backup:mappings-changed", { detail: mappings }));
         window.dispatchEvent(new CustomEvent("backup:formats-changed", { detail: formats }));
         window.dispatchEvent(new CustomEvent("backup:directory-changed", { detail: targetDirectory }));
@@ -82,6 +99,7 @@
     const openSettings = async () => {
         const draft = mappings.map(item => ({ ...item }));
         const formatDraft = formats.map(item => ({ ...item }));
+        const colorDraft = colors.map(item => ({ ...item }));
         let targetDirectoryInput;
         const result = await Swal.fire({
             title: "Backup settings", html: modalMarkup(), width: 760,
@@ -91,17 +109,61 @@
                 targetDirectoryInput = $("target-directory-path");
                 targetDirectoryInput.value = targetDirectory;
                 const list = $("mapping-list"), search = $("mapping-search");
+                const renderColorOptions = (select, selected) => {
+                    select.innerHTML = colorDraft.map(color => `<option value="${escapeHtml(color.id)}">${escapeHtml(color.name)}</option>`).join("");
+                    select.value = colorDraft.some(color => color.id === selected) ? selected : (colorDraft[0]?.id || "");
+                };
                 const openEditor = (item = {}) => {
                     const backdrop = document.createElement("div");
                     backdrop.className = "mapping-editor-backdrop";
-                    backdrop.innerHTML = '<section class="mapping-editor" role="dialog" aria-modal="true" aria-labelledby="mapping-editor-title"><header class="mapping-editor-header"><span class="mapping-editor-icon">&#8226;</span><div><p>DATABASE SETUP</p><h3 id="mapping-editor-title">' + (item.id ? 'Edit database mapping' : 'Add Database Mapping') + '</h3><small>Connect a database name to the backup files you expect to find.</small></div></header><form class="mapping-form" id="mapping-form"><label>Database name<input id="mapping-name" required maxlength="80" placeholder="Example: GTEC OneSys"></label><label>Filename patterns<input id="mapping-patterns" required maxlength="300" placeholder="Example: GTECOnesys*; Onesys*.bak"></label><p class="mapping-field-help">Use * as a wildcard. Separate multiple patterns with a semicolon.</p><label>Marker color<select id="mapping-color"><option value="onesys">Blue</option><option value="gtec">Green</option><option value="mongo">Purple</option><option value="other">Gray</option></select></label><label>Expected schedule<select id="mapping-schedule"><option>Daily</option><option>Weekdays</option><option>Weekly</option></select></label><label>Folder scope (optional)<input id="mapping-folder" maxlength="300" placeholder="Subfolder under monitored root"></label><div class="mapping-editor-actions"><button class="mapping-cancel" type="button">Cancel</button><button class="mapping-add" type="submit">' + (item.id ? 'Save changes' : 'Add mapping') + '</button></div></form></section>';
+                    backdrop.innerHTML = '<section class="mapping-editor" role="dialog" aria-modal="true" aria-labelledby="mapping-editor-title"><header class="mapping-editor-header"><span class="mapping-editor-icon">&#8226;</span><div><p>DATABASE SETUP</p><h3 id="mapping-editor-title">' + (item.id ? 'Edit database mapping' : 'Add Database Mapping') + '</h3><small>Connect a database name to the backup files you expect to find.</small></div></header><form class="mapping-form" id="mapping-form"><label>Database name<input id="mapping-name" required maxlength="80" placeholder="Example: GTEC OneSys"></label><label>Filename patterns<input id="mapping-patterns" required maxlength="300" placeholder="Example: GTECOnesys*; Onesys*.bak"></label><p class="mapping-field-help">Use * as a wildcard. Separate multiple patterns with a semicolon.</p><div class="mapping-color-field"><div class="mapping-color-label"><label for="mapping-color">Marker color</label><button class="mapping-add-color" id="manage-colors" type="button">Add color</button></div><select id="mapping-color"></select></div><label>Expected schedule<select id="mapping-schedule"><option>Daily</option><option>Weekdays</option><option>Weekly</option></select></label><label>Folder scope (optional)<input id="mapping-folder" maxlength="300" placeholder="Subfolder under monitored root"></label><div class="mapping-editor-actions"><button class="mapping-cancel" type="button">Cancel</button><button class="mapping-add" type="submit">' + (item.id ? 'Save changes' : 'Add mapping') + '</button></div></form></section>';
                     popup.appendChild(backdrop);
                     const field = id => backdrop.querySelector('#' + id);
+                    renderColorOptions(field('mapping-color'), item.color || 'onesys');
                     field('mapping-name').value = item.name || '';
                     field('mapping-patterns').value = item.patterns || '';
                     field('mapping-folder').value = item.folder || '';
-                    field('mapping-color').value = item.color || 'onesys';
                     field('mapping-schedule').value = item.schedule || 'Daily';
+                    const openColorManager = () => {
+                        const manager = document.createElement("div");
+                        manager.className = "mapping-editor-backdrop color-manager-backdrop";
+                        manager.innerHTML = '<section class="mapping-editor color-manager" role="dialog" aria-modal="true" aria-labelledby="color-manager-title"><header class="color-manager-header"><div><p>COLOR SETTINGS</p><h3 id="color-manager-title">Manage marker colors</h3></div><button class="color-manager-close" type="button" aria-label="Close">&times;</button></header><form class="color-create-form"><label>Color name<input class="color-name-input" type="text" required maxlength="32" placeholder="Example: Teal blue"></label><label>Choose color<input class="color-value-input" type="color" value="#3287bd" aria-label="Choose marker color"></label><button class="mapping-add" type="submit">Save color</button></form><div class="saved-colors-list"></div><small class="color-manager-note">Colors are saved with Backup settings. Removing a color moves its database mappings to another available color.</small></section>';
+                        popup.appendChild(manager);
+                        const colorList = manager.querySelector(".saved-colors-list");
+                        const renderColors = () => {
+                            colorList.innerHTML = colorDraft.map(color => `<div class="saved-color-row"><span class="saved-color-swatch" style="background-color:${escapeHtml(color.value)}"></span><strong>${escapeHtml(color.name)}</strong><code>${escapeHtml(color.value.toUpperCase())}</code><button type="button" data-remove-color="${escapeHtml(color.id)}">Delete</button></div>`).join("");
+                            renderColorOptions(field("mapping-color"), field("mapping-color").value);
+                            colorList.querySelectorAll("[data-remove-color]").forEach(button => button.addEventListener("click", () => {
+                                if (colorDraft.length <= 1) { window.BackupAlerts.error("Keep one color", "At least one marker color must remain."); return; }
+                                const index = colorDraft.findIndex(color => color.id === button.dataset.removeColor);
+                                if (index < 0) return;
+                                const [removed] = colorDraft.splice(index, 1);
+                                const fallback = colorDraft[0];
+                                draft.forEach(mapping => { if (mapping.color === removed.id) mapping.color = fallback.id; });
+                                if (field("mapping-color").value === removed.id) field("mapping-color").value = fallback.id;
+                                renderColors();
+                            }));
+                        };
+                        manager.querySelector(".color-manager-close").addEventListener("click", () => manager.remove());
+                        manager.addEventListener("click", event => { if (event.target === manager) manager.remove(); });
+                        manager.querySelector(".color-create-form").addEventListener("submit", event => {
+                            event.preventDefault();
+                            const nameInput = manager.querySelector(".color-name-input");
+                            const valueInput = manager.querySelector(".color-value-input");
+                            const name = nameInput.value.trim();
+                            if (!name) return;
+                            if (colorDraft.some(color => color.name.toLowerCase() === name.toLowerCase())) { window.BackupAlerts.error("Color already exists", "Choose a different color name."); return; }
+                            const id = window.crypto?.randomUUID ? window.crypto.randomUUID() : `color-${Date.now()}`;
+                            colorDraft.push({ id, name, value: valueInput.value.toLowerCase() });
+                            renderColors();
+                            field("mapping-color").value = id;
+                            nameInput.value = "";
+                            valueInput.value = "#3287bd";
+                            nameInput.focus();
+                        });
+                        renderColors();
+                    };
+                    field("manage-colors").addEventListener("click", openColorManager);
                     const close = () => backdrop.remove();
                     backdrop.addEventListener('click', event => { if (event.target === backdrop) close(); });
                     backdrop.querySelector('.mapping-cancel').addEventListener('click', close);
@@ -115,10 +177,11 @@
                         close(); renderList();
                     });
                     field('mapping-name').focus();
-                };                const renderList = () => {
+                };
+                const renderList = () => {
                     const query = search.value.trim().toLowerCase();
                     const visible = draft.filter(item => `${item.name} ${item.patterns} ${item.folder}`.toLowerCase().includes(query));
-                    list.innerHTML = visible.length ? visible.map(item => `<div class="mapping-row"><i class="file-group-dot ${escapeHtml(item.color)}"></i><div><strong>${escapeHtml(item.name)}${item.active ? "" : " · Inactive"}</strong><small>${escapeHtml(item.patterns)}${item.schedule ? ` · ${escapeHtml(item.schedule)}` : ""}</small></div><button type="button" data-edit="${escapeHtml(item.id)}">Edit</button><button type="button" data-toggle="${escapeHtml(item.id)}">${item.active ? "Deactivate" : "Activate"}</button><button type="button" class="mapping-delete" data-delete="${escapeHtml(item.id)}">Delete</button></div>`).join("") : `<p class="mapping-note">No mappings match this search.</p>`;
+                    list.innerHTML = visible.length ? visible.map(item => `<div class="mapping-row"><i class="file-group-dot ${escapeHtml(item.color)}" style="background-color:${escapeHtml(colorDraft.find(color => color.id === item.color)?.value || "#859297")}"></i><div><strong>${escapeHtml(item.name)}${item.active ? "" : " · Inactive"}</strong><small>${escapeHtml(item.patterns)}${item.schedule ? ` · ${escapeHtml(item.schedule)}` : ""}</small></div><button type="button" data-edit="${escapeHtml(item.id)}">Edit</button><button type="button" data-toggle="${escapeHtml(item.id)}">${item.active ? "Deactivate" : "Activate"}</button><button type="button" class="mapping-delete" data-delete="${escapeHtml(item.id)}">Delete</button></div>`).join("") : `<p class="mapping-note">No mappings match this search.</p>`;
                     list.querySelectorAll("[data-edit]").forEach(button => button.addEventListener("click", () => {
                         const item = draft.find(entry => entry.id === button.dataset.edit); if (!item) return;
 
@@ -135,7 +198,7 @@
                         backdrop.className = "mapping-editor-backdrop mapping-delete-backdrop";
                         backdrop.innerHTML = '<section class="mapping-editor mapping-delete-dialog" role="dialog" aria-modal="true"><span class="mapping-delete-icon">!</span><h3>Delete this mapping?</h3><p>The mapping for <strong>' + escapeHtml(item.name) + '</strong> will be removed when you save these settings.</p><div class="mapping-editor-actions"><button type="button" class="mapping-cancel">Keep mapping</button><button type="button" class="mapping-confirm-delete">Delete mapping</button></div></section>';
                         popup.appendChild(backdrop);
-                        const close = () => backdrop.remove();
+                    const close = () => backdrop.remove();
                         backdrop.querySelector(".mapping-cancel").addEventListener("click", close);
                         backdrop.addEventListener("click", event => { if (event.target === backdrop) close(); });
                         backdrop.querySelector(".mapping-confirm-delete").addEventListener("click", () => {
@@ -157,7 +220,7 @@
                         backdrop.className = "mapping-editor-backdrop mapping-delete-backdrop";
                         backdrop.innerHTML = '<section class="mapping-editor mapping-delete-dialog" role="dialog" aria-modal="true"><span class="mapping-delete-icon">!</span><h3>Remove this file format?</h3><p><strong>' + escapeHtml(item.extension) + '</strong> will be removed from the monitored formats when you save settings.</p><div class="mapping-editor-actions"><button type="button" class="mapping-cancel">Keep format</button><button type="button" class="mapping-confirm-delete">Remove format</button></div></section>';
                         popup.appendChild(backdrop);
-                        const close = () => backdrop.remove();
+                    const close = () => backdrop.remove();
                         backdrop.querySelector(".mapping-cancel").addEventListener("click", close);
                         backdrop.addEventListener("click", event => { if (event.target === backdrop) close(); });
                         backdrop.querySelector(".mapping-confirm-delete").addEventListener("click", () => {
@@ -185,12 +248,12 @@
                 renderList();
                 renderFormats();
             },
-            preConfirm: () => save(draft, formatDraft, targetDirectoryInput.value.trim()) || false
+            preConfirm: () => save(draft, formatDraft, targetDirectoryInput.value.trim(), colorDraft) || false
         });
         if (result.isConfirmed) window.BackupAlerts.success("Settings saved", "These settings are saved in this browser.");
         return result;
     };
-    window.BackupMappingStore = { getAll: () => mappings.map(item => ({ ...item })), getFormats: () => formats.map(item => ({ ...item })), getTargetDirectory: () => targetDirectory, resolve, openSettings };
+    window.BackupMappingStore = { getAll: () => mappings.map(item => ({ ...item })), getFormats: () => formats.map(item => ({ ...item })), getTargetDirectory: () => targetDirectory, getColor: id => colors.find(color => color.id === id)?.value || "#859297", resolve, openSettings };
     document.addEventListener("DOMContentLoaded", () => document.getElementById("mapping-settings")?.addEventListener("click", openSettings));
 })();
 
