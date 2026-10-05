@@ -1,0 +1,25 @@
+<div class="auth-modal modal fade" id="loginModal" tabindex="-1" aria-labelledby="loginModalTitle" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered"><div class="modal-content">
+        <div class="modal-header"><div><span class="auth-eyebrow">GTEC BACKUP MONITOR</span><h2 class="modal-title" id="loginModalTitle">Welcome back</h2><p>Sign in to continue to your reports.</p></div><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button></div>
+        <div class="modal-body"><div class="auth-validation-summary" id="login-validation-summary" role="alert" hidden></div>
+            <form id="login-modal-form" method="post" asp-area="Identity" asp-page="/Account/Login" asp-route-returnUrl="@(Context.Request.Query["returnUrl"].ToString())" novalidate>
+                <div class="auth-field"><label for="login-email">Email</label><input id="login-email" name="Input.Email" type="email" autocomplete="username" required maxlength="256" placeholder="you@example.com"><span class="auth-field-error" data-validation-for="Input.Email"></span></div>
+                <div class="auth-field"><label for="login-password">Password</label><input id="login-password" name="Input.Password" type="password" autocomplete="current-password" required placeholder="Enter your password"><span class="auth-field-error" data-validation-for="Input.Password"></span></div>
+                <label class="auth-remember"><input type="checkbox" name="Input.RememberMe" value="true"><span>Remember me</span></label><button class="auth-submit" type="submit">Sign in</button>
+            </form><p class="auth-switch">New here? <button type="button" data-auth-switch="register">Create an account</button></p>
+        </div>
+    </div></div>
+</div>
+<div class="auth-modal modal fade" id="registerModal" tabindex="-1" aria-labelledby="registerModalTitle" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered"><div class="modal-content">
+        <div class="modal-header"><div><span class="auth-eyebrow">GTEC BACKUP MONITOR</span><h2 class="modal-title" id="registerModalTitle">Create your account</h2><p>Register to access backup reports.</p></div><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button></div>
+        <div class="modal-body"><div class="auth-validation-summary" id="register-validation-summary" role="alert" hidden></div>
+            <form id="register-modal-form" method="post" asp-area="Identity" asp-page="/Account/Register" asp-route-returnUrl="@(Context.Request.Query["returnUrl"].ToString())" novalidate>
+                <div class="auth-field"><label for="register-email">Email</label><input id="register-email" name="Input.Email" type="email" autocomplete="email" required maxlength="256" placeholder="you@example.com"><span class="auth-field-error" data-validation-for="Input.Email"></span></div>
+                <div class="auth-field"><label for="register-password">Password</label><input id="register-password" name="Input.Password" type="password" autocomplete="new-password" required minlength="6" placeholder="Create a password"><span class="auth-field-error" data-validation-for="Input.Password"></span><small>Use at least 6 characters. The server may require additional character types.</small></div>
+                <div class="auth-field"><label for="register-confirm-password">Confirm password</label><input id="register-confirm-password" name="Input.ConfirmPassword" type="password" autocomplete="new-password" required minlength="6" placeholder="Enter the password again"><span class="auth-field-error" data-validation-for="Input.ConfirmPassword"></span></div>
+                <button class="auth-submit" type="submit">Create account</button>
+            </form><p class="auth-switch">Already registered? <button type="button" data-auth-switch="login">Sign in</button></p>
+        </div>
+    </div></div>
+</div>
