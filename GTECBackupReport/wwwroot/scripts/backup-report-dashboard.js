@@ -1,6 +1,6 @@
 (() => {
     const $ = id => document.getElementById(id);
-    const ui = { rows: $("backup-rows"), search: $("search-term-input"), chips: $("search-terms"), source: $("source-filter"), status: $("status-filter"), format: $("format-filter"), from: $("date-from"), to: $("date-to"), range: $("date-control"), empty: $("empty-state"), emptyKicker: $("empty-kicker"), emptyTitle: $("empty-title"), emptyDescription: $("empty-description"), emptyClear: $("empty-clear"), scanner: $("scanner-status"), scannerDetail: $("scanner-detail"), size: $("page-size"), count: $("result-count"), summary: $("page-summary"), page: $("page-number"), prev: $("previous-page"), next: $("next-page"), periodText: $("period-summary"), printMeta: $("print-meta") };
+    const ui = { rows: $("backup-rows"), search: $("search-term-input"), chips: $("search-terms"), source: $("source-filter"), status: $("status-filter"), format: $("format-filter"), from: $("date-from"), to: $("date-to"), range: $("date-control"), empty: $("empty-state"), emptyKicker: $("empty-kicker"), emptyTitle: $("empty-title"), emptyDescription: $("empty-description"), emptyClear: $("empty-clear"), size: $("page-size"), count: $("result-count"), summary: $("page-summary"), page: $("page-number"), prev: $("previous-page"), next: $("next-page"), periodText: $("period-summary"), printMeta: $("print-meta") };
     const state = { period: "week", sort: "date", descending: true, page: 1, printing: false, searchTerms: [], scanError: null };
     let scannedFiles = [];
     let allRows = [];
@@ -56,7 +56,9 @@
             if(range.from&&row.date<range.from)return false;
             if(range.to&&row.date>range.to)return false;
             const mapped=mappingInfo(row);
-            if(ui.source.value&&mapped.name!==ui.source.value)return false;
+            const source=ui.source.value;
+            if(source==="all-databases"&&mapped.name==="Unmapped")return false;
+            if(source&&source!=="all-databases"&&source!=="all-files"&&mapped.name!==source)return false;
             if(ui.status.value&&mapped.status!==ui.status.value)return false;
             if(ui.format.value&&row.ext!==ui.format.value)return false;
             const haystack=`${row.day} ${row.date} ${mapped.name} ${row.file} ${row.ext} ${row.path}`.toLocaleLowerCase();
@@ -90,7 +92,7 @@
         const offset=(state.page-1)*pageSize,shown=results.slice(offset,offset+pageSize);
         ui.rows.innerHTML=shown.map(row=>{
             const mapped=mappingInfo(row),statusClass=mapped.status==="Working"?"working":mapped.status==="Unmapped"?"unmapped":"missing";
-            return `<tr><td>${esc(row.day)}</td><td><time datetime="${row.date}">${showDate(row.date)}</time></td><td class="database-cell"><i class="database-group-dot ${esc(mapped.color)}" aria-hidden="true"></i><strong>${esc(mapped.name)}</strong></td><td class="filename"><div class="filename-main">${row.file?`<span title="${esc(row.file)}">${esc(row.file)}</span>`:`<span class="missing-file">No matching backup file</span>`}</div><small>${esc(row.ext||"Not available")}</small></td><td><span class="status-badge ${statusClass}"><i></i>${esc(mapped.status)}</span></td><td class="actions"><button class="details-button" type="button" data-detail="${esc(row.id)}">Details</button></td></tr>`;
+            return `<tr><td>${esc(row.day)}</td><td><time datetime="${row.date}">${showDate(row.date)}</time></td><td class="database-cell"><i class="database-group-dot ${esc(mapped.color)}" style="background-color:${esc(window.BackupMappingStore.getColor(mapped.color))}" aria-hidden="true"></i><strong>${esc(mapped.name)}</strong></td><td class="filename"><div class="filename-main">${row.file?`<span title="${esc(row.file)}">${esc(row.file)}</span>`:`<span class="missing-file">No matching backup file</span>`}</div><small>${esc(row.ext||"Not available")}</small></td><td><span class="status-badge ${statusClass}"><i></i>${esc(mapped.status)}</span></td><td class="actions"><button class="details-button" type="button" data-detail="${esc(row.id)}">Details</button></td></tr>`;
         }).join("");
         updateSortArrows();
         ui.empty.hidden=results.length>0; $("backup-table").hidden=results.length===0;
@@ -106,6 +108,7 @@
         $("expected-count").textContent=results.length;
         $("working-count").textContent=results.filter(row=>mappingInfo(row).status==="Working").length;
         $("missing-count").textContent=results.filter(row=>mappingInfo(row).status==="No Backup").length;
+        $("unmapped-count").textContent=results.filter(row=>mappingInfo(row).status==="Unmapped").length;
         $("expected-caption").textContent=state.period==="month"?"month to date":"selected period";
         ui.periodText.textContent=`${state.period==="week"?"Weekly report · ":state.period==="month"?"Monthly report · ":""}${bounds().label}`;
         const searchSummary=state.searchTerms.length?` · Search: ${state.searchTerms.join(" OR ")}`:"";
@@ -116,8 +119,8 @@
     const scanDirectory=async()=>{
         const directoryPath=window.BackupMappingStore.getTargetDirectory(),sequence=++scanSequence;
         state.scanError=null;scannedFiles=[];
-        if(!directoryPath){ui.scanner.textContent=$("mapping-settings")?"Not configured":"Sign in required";ui.scannerDetail.textContent=$("mapping-settings")?"Set a target directory":"Sign in to configure backup monitoring";render();return;}
-        ui.scanner.textContent="Scanning";ui.scannerDetail.textContent="Reading files and subfolders";render();
+        if(!directoryPath){render();return;}
+        render();
         try{
             const response=await fetch("/api/backup-files/scan",{method:"POST",credentials:"same-origin",headers:{"Content-Type":"application/json"},body:JSON.stringify({directoryPath})});
             const finalUrl=new URL(response.url,window.location.href);
@@ -127,14 +130,14 @@
             if(sequence!==scanSequence)return;
             const detectedAt=new Date().toISOString();
             scannedFiles=(payload.files||[]).map(file=>({...file,detectedAt}));
-            ui.scanner.textContent=payload.truncated?"Scan limited":"Connected";ui.scannerDetail.textContent=payload.truncated?`Showing the first ${scannedFiles.length.toLocaleString()} files`:`${scannedFiles.length.toLocaleString()} files found`;
-        }catch(error){if(sequence!==scanSequence)return;scannedFiles=[];state.scanError=error.message||"The target directory could not be scanned.";ui.scanner.textContent=state.scanError.startsWith("Sign in")?"Sign in required":"Unavailable";ui.scannerDetail.textContent=state.scanError;}
+
+        }catch(error){if(sequence!==scanSequence)return;scannedFiles=[];state.scanError=error.message||"The target directory could not be scanned.";}
         state.page=1;render();
     };
     const refreshSourceOptions=()=>{
         const current=ui.source.value, options=window.BackupMappingStore.getAll().filter(item=>item.active).map(item=>`<option value="${esc(item.name)}">${esc(item.name)}</option>`).join("");
-        ui.source.innerHTML=`<option value="">All databases</option>${options}<option value="Unmapped">Unmapped</option>`;
-        ui.source.value=[...ui.source.options].some(option=>option.value===current)?current:"";
+        ui.source.innerHTML=`<option value="all-databases">All databases</option><option value="all-files">All files</option>${options}<option value="Unmapped">Unmapped</option>`;
+        ui.source.value=[...ui.source.options].some(option=>option.value===current)?current:"all-databases";
     };
     const refreshFormatOptions=()=>{
         const current=ui.format.value, options=window.BackupMappingStore.getFormats().filter(item=>item.active).map(item=>`<option value="${esc(item.extension)}">${esc(item.extension)}</option>`).join("");
@@ -160,7 +163,7 @@
     $("add-search-term").addEventListener("click",addSearchTerm);
     ui.search.addEventListener("keydown",event=>{if(event.key==="Enter"){event.preventDefault();addSearchTerm();}});
     const clear=()=>{
-        ui.search.value="";state.searchTerms=[];renderSearchTerms();ui.source.value="";ui.status.value="";ui.format.value="";ui.from.value="";ui.to.value="";
+        ui.search.value="";state.searchTerms=[];renderSearchTerms();ui.source.value="all-databases";ui.status.value="";ui.format.value="";ui.from.value="";ui.to.value="";
         state.period="week";state.page=1;ui.range.hidden=true;
         document.querySelectorAll("[data-period]").forEach(button=>button.classList.toggle("active",button.dataset.period==="week"));
         render();
