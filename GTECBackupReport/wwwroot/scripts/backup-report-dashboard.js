@@ -4,6 +4,7 @@
     const state = { period: "week", sort: "date", descending: true, page: 1, printing: false, searchTerms: [], scanError: null };
     let scannedFiles = [];
     let allRows = [];
+    let titleBeforePrint = null;
     const pad = n => String(n).padStart(2, "0");
     const key = d => `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
     const mondayOf = d => { const x=new Date(d.getFullYear(),d.getMonth(),d.getDate()); x.setDate(x.getDate()-((x.getDay()+6)%7)); return x; };
@@ -113,8 +114,8 @@
         $("unmapped-count").textContent=results.filter(row=>mappingInfo(row).status==="Unmapped").length;
         $("expected-caption").textContent=state.period==="month"?"month to date":"selected period";
         ui.periodText.textContent=`${state.period==="week"?"Weekly report · ":state.period==="month"?"Monthly report · ":""}${bounds().label}`;
-        const searchSummary=state.searchTerms.length?` · Search: ${state.searchTerms.join(" OR ")}`:"";
-        ui.printMeta.textContent=`GTEC Production Backup Report · ${bounds().label}${searchSummary} · ${results.length} records · Printed ${new Date().toLocaleString()}`;
+        const printedAt=new Date();
+        ui.printMeta.textContent=`Printed on ${printedAt.toLocaleDateString()} at ${printedAt.toLocaleTimeString("en-US",{hour:"numeric",minute:"2-digit",hour12:true})}`;
         ui.rows.querySelectorAll("[data-detail]").forEach(button=>button.addEventListener("click",()=>{const row=allRows.find(item=>item.id===button.dataset.detail);if(row)details(row);}));
     };
     let scanSequence=0;
@@ -206,8 +207,15 @@
     };
     $("clear-filters").addEventListener("click",clear);$("empty-clear").addEventListener("click",clear);
     $("empty-open-settings")?.addEventListener("click",()=>$("mapping-settings")?.click());
-    $("print-report").addEventListener("click",()=>{state.printing=true;render();window.print();});
-    window.addEventListener("afterprint",()=>{state.printing=false;render();});
+    const setPrintTitle=()=>{
+        if(titleBeforePrint===null)titleBeforePrint=document.title;
+        const range=bounds();
+        const period=state.period==="week"?"Weekly":state.period==="month"?"Monthly":"Custom";
+        document.title=`GTEC ${period} Backup ${range.from||"No start date"} - ${range.to||"No end date"}`;
+    };
+    $("print-report").addEventListener("click",()=>{state.printing=true;render();setPrintTitle();window.print();});
+    window.addEventListener("beforeprint",setPrintTitle);
+    window.addEventListener("afterprint",()=>{if(titleBeforePrint!==null){document.title=titleBeforePrint;titleBeforePrint=null;}state.printing=false;render();});
     window.addEventListener("backup:mappings-changed",()=>{refreshSourceOptions();if(defaultFilters&&!([...ui.source.options].some(option=>option.value===defaultFilters.source)))defaultFilters.source="all-databases";state.page=1;render();});
     window.addEventListener("backup:formats-changed",()=>{refreshFormatOptions();if(defaultFilters&&!([...ui.format.options].some(option=>option.value===defaultFilters.format)))defaultFilters.format="";state.page=1;render();});
     window.addEventListener("backup:statuses-changed",()=>{refreshStatusOptions();if(defaultFilters&&!([...ui.status.options].some(option=>option.value===defaultFilters.status)))defaultFilters.status="";});
