@@ -10,7 +10,7 @@
             <span class="eyebrow-mark"></span> GTEC · BACKUP OPERATIONS
         </div>
         <h1>Production Backup Report</h1>
-        <p class="subtitle">A clear view of expected backups across your environments.</p>
+        <p class="subtitle">Track scheduled backups, spot missing files, and find files that still need a source mapping.</p>
     </div>
     <div class="heading-actions"><button class="button button-primary" id="print-report" type="button">Print report</button></div>
 </section>
@@ -118,7 +118,7 @@
         @if (SignInManager.IsSignedIn(User)) { <button class="button button-outline" id="empty-open-settings" type="button">Configure target folder</button> }
     </div>
 </div>
-<footer class="table-footer"><span id="page-summary">Showing 0 records</span><div><label for="page-size">Rows</label><select id="page-size"><option>10</option><option>25</option><option>50</option></select><button id="previous-page" aria-label="Previous page" type="button">‹</button><span id="page-number">1 / 1</span><button id="next-page" aria-label="Next page" type="button">›</button></div></footer></section><p class="footnote">File presence shows that a file was detected. It does not confirm that backup contents are valid.</p></div>
+<footer class="table-footer"><span id="page-summary">Showing 0 records</span><div><label for="page-size">Rows</label><select id="page-size"><option>10</option><option>25</option><option>50</option></select><button id="previous-page" aria-label="Previous page" type="button">‹</button><span id="page-number">1 / 1</span><button id="next-page" aria-label="Next page" type="button">›</button></div></footer></section><p class="footnote">A “Working” result means a matching file was detected; it does not verify the backup or confirm that it can be restored.</p></div>
 @section Scripts { <script src="~/scripts/backup-report-dashboard.js" asp-append-version="true"></script> }
 
 
