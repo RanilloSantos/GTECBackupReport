@@ -1,7 +1,7 @@
 (() => {
     const $ = id => document.getElementById(id);
     const ui = { rows: $("backup-rows"), search: $("search-term-input"), chips: $("search-terms"), source: $("source-filter"), status: $("status-filter"), format: $("format-filter"), from: $("date-from"), to: $("date-to"), range: $("date-control"), empty: $("empty-state"), emptyKicker: $("empty-kicker"), emptyTitle: $("empty-title"), emptyDescription: $("empty-description"), emptyClear: $("empty-clear"), size: $("page-size"), count: $("result-count"), summary: $("page-summary"), page: $("page-number"), prev: $("previous-page"), next: $("next-page"), periodText: $("period-summary"), printMeta: $("print-meta") };
-    const state = { period: "week", sort: "date", descending: true, page: 1, printing: false, searchTerms: [], scanError: null };
+    const state = { period: "month", sort: "date", descending: true, page: 1, printing: false, searchTerms: [], scanError: null };
     let scannedFiles = [];
     let allRows = [];
     const pad = n => String(n).padStart(2, "0");
@@ -57,8 +57,9 @@
             if(range.to&&row.date>range.to)return false;
             const mapped=mappingInfo(row);
             const source=ui.source.value;
-            if(source==="all-databases"&&mapped.name==="Unmapped")return false;
-            if(source&&source!=="all-databases"&&source!=="all-files"&&mapped.name!==source)return false;
+            if(source==="all-databases"&&mapped.status==="Unmapped")return false;
+            if(source==="unmapped-only"&&mapped.status!=="Unmapped")return false;
+            if(source&&source!=="all-databases"&&source!=="all-files"&&source!=="unmapped-only"&&mapped.name!==source)return false;
             if(ui.status.value&&mapped.status!==ui.status.value)return false;
             if(ui.format.value&&row.ext!==ui.format.value)return false;
             const haystack=`${row.day} ${row.date} ${mapped.name} ${row.file} ${row.ext} ${row.path}`.toLocaleLowerCase();
@@ -97,7 +98,8 @@
         updateSortArrows();
         ui.empty.hidden=results.length>0; $("backup-table").hidden=results.length===0;
         const configuredDirectory=window.BackupMappingStore.getTargetDirectory(), settingsAvailable=Boolean($("mapping-settings"));
-        if(!configuredDirectory){ui.emptyKicker.textContent=settingsAvailable?"SETUP REQUIRED":"SIGN IN REQUIRED";ui.emptyTitle.textContent=settingsAvailable?"Choose a target directory":"Sign in to configure backup monitoring";ui.emptyDescription.textContent=settingsAvailable?"Open Backup settings and enter the server-visible directory path.":"A signed-in user must configure the directory before files can be scanned.";}
+        if(window.BackupMappingStore.getLoadError()){ui.emptyKicker.textContent="SETTINGS ISSUE";ui.emptyTitle.textContent="Could not load backup settings";ui.emptyDescription.textContent=window.BackupMappingStore.getLoadError();}
+        else if(!configuredDirectory){ui.emptyKicker.textContent=settingsAvailable?"SETUP REQUIRED":"SIGN IN REQUIRED";ui.emptyTitle.textContent=settingsAvailable?"Choose a target directory":"Sign in to configure backup monitoring";ui.emptyDescription.textContent=settingsAvailable?"Open Backup settings and enter the server-visible directory path.":"A signed-in user must configure the directory before files can be scanned.";}
         else if(state.scanError){ui.emptyKicker.textContent="SCAN ISSUE";ui.emptyTitle.textContent="Could not read the target directory";ui.emptyDescription.textContent=state.scanError;}
         else{ui.emptyKicker.textContent="NO RESULTS";ui.emptyTitle.textContent="No backup records match";ui.emptyDescription.textContent="Try another period or clear a filter.";}
         ui.emptyClear.hidden=!configuredDirectory||Boolean(state.scanError);
@@ -136,13 +138,18 @@
     };
     const refreshSourceOptions=()=>{
         const current=ui.source.value, options=window.BackupMappingStore.getAll().filter(item=>item.active).map(item=>`<option value="${esc(item.name)}">${esc(item.name)}</option>`).join("");
-        ui.source.innerHTML=`<option value="all-databases">All databases</option><option value="all-files">All files</option>${options}<option value="Unmapped">Unmapped</option>`;
-        ui.source.value=[...ui.source.options].some(option=>option.value===current)?current:"all-databases";
+        ui.source.innerHTML=`<option value="">Select backup source</option><option value="all-databases">All databases</option><option value="all-files">All files</option>${options}<option value="unmapped-only">Unmapped</option>`;
+        ui.source.value=[...ui.source.options].some(option=>option.value===current)?current:"";
     };
     const refreshFormatOptions=()=>{
         const current=ui.format.value, options=window.BackupMappingStore.getFormats().filter(item=>item.active).map(item=>`<option value="${esc(item.extension)}">${esc(item.extension)}</option>`).join("");
-        ui.format.innerHTML=`<option value="">All formats</option>${options}`;
+        ui.format.innerHTML=`<option value="">Select file format</option>${options}`;
         ui.format.value=[...ui.format.options].some(option=>option.value===current)?current:"";
+    };
+    const refreshStatusOptions=()=>{
+        const current=ui.status.value, options=window.BackupMappingStore.getStatuses().map(item=>`<option value="${esc(item.value)}">${esc(item.label)}</option>`).join("");
+        ui.status.innerHTML=`<option value="">Select status</option>${options}`;
+        ui.status.value=[...ui.status.options].some(option=>option.value===current)?current:"";
     };
 
     document.querySelectorAll("[data-period]").forEach(button=>button.addEventListener("click",()=>{
@@ -163,9 +170,9 @@
     $("add-search-term").addEventListener("click",addSearchTerm);
     ui.search.addEventListener("keydown",event=>{if(event.key==="Enter"){event.preventDefault();addSearchTerm();}});
     const clear=()=>{
-        ui.search.value="";state.searchTerms=[];renderSearchTerms();ui.source.value="all-databases";ui.status.value="";ui.format.value="";ui.from.value="";ui.to.value="";
-        state.period="week";state.page=1;ui.range.hidden=true;
-        document.querySelectorAll("[data-period]").forEach(button=>button.classList.toggle("active",button.dataset.period==="week"));
+        ui.search.value="";state.searchTerms=[];renderSearchTerms();ui.source.value="";ui.status.value="";ui.format.value="";ui.from.value="";ui.to.value="";
+        state.period="month";state.page=1;ui.range.hidden=true;
+        document.querySelectorAll("[data-period]").forEach(button=>button.classList.toggle("active",button.dataset.period==="month"));
         render();
     };
     $("clear-filters").addEventListener("click",clear);$("empty-clear").addEventListener("click",clear);
@@ -174,8 +181,9 @@
     window.addEventListener("afterprint",()=>{state.printing=false;render();});
     window.addEventListener("backup:mappings-changed",()=>{refreshSourceOptions();state.page=1;render();});
     window.addEventListener("backup:formats-changed",()=>{refreshFormatOptions();state.page=1;render();});
+    window.addEventListener("backup:statuses-changed",refreshStatusOptions);
     window.addEventListener("backup:directory-changed",scanDirectory);
-    refreshSourceOptions();refreshFormatOptions();scanDirectory();
+    window.BackupMappingStore.ready.then(()=>{refreshSourceOptions();refreshStatusOptions();refreshFormatOptions();scanDirectory();});
 })();
 
 

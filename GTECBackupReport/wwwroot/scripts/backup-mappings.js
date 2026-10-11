@@ -1,63 +1,33 @@
 (() => {
-    const defaults = [
-        { id: "onesys", name: "GTEC OneSys", patterns: "GTECOnesys*", folder: "", color: "onesys", schedule: "Daily", active: true },
-        { id: "mongo", name: "GTEC MongoDB", patterns: "GTEC_PROD_database*", folder: "", color: "mongo", schedule: "Daily", active: true },
-        { id: "gtec", name: "GTEC", patterns: "GTEC_backup*", folder: "", color: "gtec", schedule: "Daily", active: true }
-    ];
-    const storageKey = "gtec-backup-database-mappings";
-    const formatStorageKey = "gtec-backup-file-formats";
-    const targetDirectoryStorageKey = "gtec-backup-target-directory";
-    const colorStorageKey = "gtec-backup-marker-colors";
-    const defaultFormats = [".bak", ".archive", ".zip"];
-    const defaultColors = [
-        { id: "onesys", name: "Blue", value: "#3287bd" },
-        { id: "gtec", name: "Green", value: "#43a077" },
-        { id: "mongo", name: "Purple", value: "#8870b1" },
-        { id: "other", name: "Gray", value: "#859297" }
-    ];
+    const settingsUrl = "/api/backup-settings";
+    const legacyStorageKeys = ["gtec-backup-database-mappings", "gtec-backup-file-formats", "gtec-backup-target-directory", "gtec-backup-marker-colors"];
+    try { legacyStorageKeys.forEach(key => localStorage.removeItem(key)); } catch { /* Browser storage may be disabled. */ }
     const escapeHtml = value => String(value).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;", "'": "&#39;" }[c]));
-    const load = () => {
-        try {
-            const stored = JSON.parse(localStorage.getItem(storageKey));
-            if (Array.isArray(stored)) return stored;
-        } catch { /* Use the built-in examples when browser storage is unavailable. */ }
-        return defaults.map(item => ({ ...item }));
-    };
-    let mappings = load();
-    const loadFormats = () => {
-        try {
-            const stored = JSON.parse(localStorage.getItem(formatStorageKey));
-            if (Array.isArray(stored)) return stored;
-        } catch { /* Use the built-in examples when browser storage is unavailable. */ }
-        return defaultFormats.map(extension => ({ extension, active: true }));
-    };
-    let formats = loadFormats();
-    const loadColors = () => {
-        try {
-            const stored = JSON.parse(localStorage.getItem(colorStorageKey));
-            if (Array.isArray(stored) && stored.length) return stored;
-        } catch { /* Use the built-in colors when browser storage is unavailable. */ }
-        return defaultColors.map(item => ({ ...item }));
-    };
-    let colors = loadColors();
-    const loadTargetDirectory = () => { try { return localStorage.getItem(targetDirectoryStorageKey) || ""; } catch { return ""; } };
-    let targetDirectory = loadTargetDirectory();
-    const save = (nextMappings, nextFormats, nextTargetDirectory, nextColors) => {
-        try {
-            localStorage.setItem(storageKey, JSON.stringify(nextMappings));
-            localStorage.setItem(formatStorageKey, JSON.stringify(nextFormats));
-            localStorage.setItem(targetDirectoryStorageKey, nextTargetDirectory);
-            localStorage.setItem(colorStorageKey, JSON.stringify(nextColors));
-        } catch { window.BackupAlerts.error("Could not save settings", "Browser storage is unavailable."); return false; }
-        mappings = nextMappings;
-        formats = nextFormats;
-        targetDirectory = nextTargetDirectory;
-        colors = nextColors;
+    let mappings = [], formats = [], colors = [], statuses = [], targetDirectory = "", loadError = null;
+    const dispatchSettingsChanged = () => {
         window.dispatchEvent(new CustomEvent("backup:mappings-changed", { detail: mappings }));
         window.dispatchEvent(new CustomEvent("backup:formats-changed", { detail: formats }));
+        window.dispatchEvent(new CustomEvent("backup:statuses-changed", { detail: statuses }));
         window.dispatchEvent(new CustomEvent("backup:directory-changed", { detail: targetDirectory }));
-        return true;
     };
+    const settingsReady = fetch(settingsUrl, { credentials: "same-origin" })
+        .then(response => {
+            if (!response.ok) throw new Error("Could not load backup settings from SQL Server.");
+            return response.json();
+        })
+        .then(settings => {
+            mappings = (settings.sources || []).map(item => ({ ...item, color: item.colorId }));
+            formats = settings.formats || [];
+            colors = settings.colors || [];
+            statuses = settings.statuses || [];
+            targetDirectory = settings.targetDirectory || "";
+            dispatchSettingsChanged();
+            return true;
+        })
+        .catch(error => {
+            loadError = error.message || "Could not load backup settings.";
+            return false;
+        });
     const escapePattern = pattern => pattern.split("*").map(part => part.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join(".*");
     const matches = (filename, pattern) => {
         try { return new RegExp(`^${escapePattern(pattern.trim())}$`, "i").test(filename); }
@@ -72,6 +42,43 @@
         }
         return { mapping: mappings.find(mapping => mapping.name === expectedName) || null, ambiguous: false };
     };
+    const save = async (nextMappings, nextFormats, nextTargetDirectory, nextColors) => {
+        const token = document.querySelector('input[name="__RequestVerificationToken"]')?.value;
+        try {
+            const response = await fetch(settingsUrl, {
+                method: "PUT",
+                credentials: "same-origin",
+                headers: { "Content-Type": "application/json", "RequestVerificationToken": token || "" },
+                body: JSON.stringify({
+                    targetDirectory: nextTargetDirectory,
+                    sources: nextMappings.map(item => ({ id: item.id, name: item.name, patterns: item.patterns, folder: item.folder, colorId: item.color, schedule: item.schedule, active: item.active })),
+                    formats: nextFormats,
+                    colors: nextColors
+                })
+            });
+            if (response.status !== 204) {
+                const responseText = await response.text();
+                let payload = {};
+                try { payload = responseText ? JSON.parse(responseText) : {}; } catch { /* The server may return a plain text or HTML error. */ }
+                const message = payload.message || payload.detail || payload.title || responseText.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
+                throw new Error(message ? `${message} (HTTP ${response.status})` : `Settings could not be saved to SQL Server (HTTP ${response.status}).`);
+            }
+            mappings = nextMappings.map(item => ({ ...item }));
+            formats = nextFormats.map(item => ({ ...item }));
+            colors = nextColors.map(item => ({ ...item }));
+            targetDirectory = nextTargetDirectory;
+            dispatchSettingsChanged();
+            return true;
+        } catch (error) {
+            Swal.showValidationMessage(error.message || "Settings could not be saved.");
+            return false;
+        }
+    };
+    let nextGeneratedId = 0;
+    const makeId = () => {
+        nextGeneratedId = Math.max(nextGeneratedId, 0, ...mappings.map(item => Number(item.id) || 0), ...colors.map(item => Number(item.id) || 0)) + 1;
+        return nextGeneratedId;
+    };
     const modalMarkup = () => `
         <nav class="settings-tabs" role="tablist" aria-label="Backup settings">
             <button class="settings-tab active" type="button" role="tab" aria-selected="true" aria-controls="directory-panel" data-settings-tab="directory">Target directory</button>
@@ -81,22 +88,23 @@
         <section class="settings-panel directory-panel" id="directory-panel" role="tabpanel" data-settings-panel="directory">
             <p class="mapping-note">Choose the server directory that contains your backup files. The scanner includes files in all subfolders.</p>
             <div class="directory-settings-form"><label for="target-directory-path">Target directory path</label><input id="target-directory-path" type="text" placeholder="For example: D:\\BackupFiles or \\\\server\\share\\Backups" autocomplete="off" spellcheck="false"><small>Enter an absolute path that the web server account can read. File names and metadata are read; file contents are not.</small></div>
-            <p class="mapping-storage-note">The path is saved in this browser for now. The folder scan runs on the web server after you save settings.</p>
+            <p class="mapping-storage-note">The path is stored in SQL Server and shared by signed-in users. The folder scan runs on the web server after you save settings.</p>
         </section>
         <section class="settings-panel" id="mappings-panel" hidden role="tabpanel" data-settings-panel="mappings">
             <p class="mapping-note">Map database names to filename patterns. A match gives each report row its database label and marker color.</p>
             <input class="mapping-search" id="mapping-search" type="search" placeholder="Search mappings by name or pattern" aria-label="Search mappings">
             <div class="mapping-list" id="mapping-list"></div>
             <button class="mapping-add" id="mapping-new" type="button">Add database mapping</button>
-            <p class="mapping-storage-note">Database mappings are currently saved in this browser only.</p>
+            <p class="mapping-storage-note">Adding or editing a mapping changes this draft. Select Save settings to store all pending changes in SQL Server for signed-in users.</p>
         </section>
         <section class="settings-panel" id="formats-panel" role="tabpanel" data-settings-panel="formats" hidden>
             <p class="mapping-note">Choose which filename extensions the report recognizes. Active formats appear in the File format filter.</p>
             <form class="format-add-form" id="format-add-form"><label for="format-new-input">Add a file extension</label><div><input id="format-new-input" type="text" placeholder="For example: .bak or .tar.gz" autocomplete="off"><button class="mapping-add" type="submit">Add format</button></div><small id="format-error" role="status"></small></form>
             <div class="format-list" id="format-list"></div>
-            <p class="mapping-storage-note">File formats are currently saved in this browser only.</p>
+            <p class="mapping-storage-note">File formats are stored in SQL Server and shared by signed-in users.</p>
         </section>`;
     const openSettings = async () => {
+        if (!(await settingsReady)) { window.BackupAlerts.error("Settings unavailable", loadError || "Could not load settings from SQL Server."); return; }
         const draft = mappings.map(item => ({ ...item }));
         const formatDraft = formats.map(item => ({ ...item }));
         const colorDraft = colors.map(item => ({ ...item }));
@@ -110,8 +118,8 @@
                 targetDirectoryInput.value = targetDirectory;
                 const list = $("mapping-list"), search = $("mapping-search");
                 const renderColorOptions = (select, selected) => {
-                    select.innerHTML = colorDraft.map(color => `<option value="${escapeHtml(color.id)}">${escapeHtml(color.name)}</option>`).join("");
-                    select.value = colorDraft.some(color => color.id === selected) ? selected : (colorDraft[0]?.id || "");
+                    select.innerHTML = `<option value="">Select marker color</option>` + colorDraft.map(color => `<option value="${escapeHtml(color.id)}">${escapeHtml(color.name)}</option>`).join("");
+                    select.value = colorDraft.some(color => Number(color.id) === Number(selected)) ? selected : "";
                 };
                 const openEditor = (item = {}) => {
                     const backdrop = document.createElement("div");
@@ -119,7 +127,7 @@
                     backdrop.innerHTML = '<section class="mapping-editor" role="dialog" aria-modal="true" aria-labelledby="mapping-editor-title"><header class="mapping-editor-header"><span class="mapping-editor-icon">&#8226;</span><div><p>DATABASE SETUP</p><h3 id="mapping-editor-title">' + (item.id ? 'Edit database mapping' : 'Add Database Mapping') + '</h3><small>Connect a database name to the backup files you expect to find.</small></div></header><form class="mapping-form" id="mapping-form"><label>Database name<input id="mapping-name" required maxlength="80" placeholder="Example: GTEC OneSys"></label><label>Filename patterns<input id="mapping-patterns" required maxlength="300" placeholder="Example: GTECOnesys*; Onesys*.bak"></label><p class="mapping-field-help">Use * as a wildcard. Separate multiple patterns with a semicolon.</p><div class="mapping-color-field"><div class="mapping-color-label"><label for="mapping-color">Marker color</label><button class="mapping-add-color" id="manage-colors" type="button">Add color</button></div><select id="mapping-color"></select></div><label>Expected schedule<select id="mapping-schedule"><option>Daily</option><option>Weekdays</option><option>Weekly</option></select></label><label>Folder scope (optional)<input id="mapping-folder" maxlength="300" placeholder="Subfolder under monitored root"></label><div class="mapping-editor-actions"><button class="mapping-cancel" type="button">Cancel</button><button class="mapping-add" type="submit">' + (item.id ? 'Save changes' : 'Add mapping') + '</button></div></form></section>';
                     popup.appendChild(backdrop);
                     const field = id => backdrop.querySelector('#' + id);
-                    renderColorOptions(field('mapping-color'), item.color || 'onesys');
+                    renderColorOptions(field('mapping-color'), item.color || colorDraft[0]?.id || "");
                     field('mapping-name').value = item.name || '';
                     field('mapping-patterns').value = item.patterns || '';
                     field('mapping-folder').value = item.folder || '';
@@ -134,13 +142,16 @@
                             colorList.innerHTML = colorDraft.map(color => `<div class="saved-color-row"><span class="saved-color-swatch" style="background-color:${escapeHtml(color.value)}"></span><strong>${escapeHtml(color.name)}</strong><code>${escapeHtml(color.value.toUpperCase())}</code><button type="button" data-remove-color="${escapeHtml(color.id)}">Delete</button></div>`).join("");
                             renderColorOptions(field("mapping-color"), field("mapping-color").value);
                             colorList.querySelectorAll("[data-remove-color]").forEach(button => button.addEventListener("click", () => {
-                                if (colorDraft.length <= 1) { window.BackupAlerts.error("Keep one color", "At least one marker color must remain."); return; }
-                                const index = colorDraft.findIndex(color => color.id === button.dataset.removeColor);
+                                const removeColorId = Number(button.dataset.removeColor);
+                                const index = colorDraft.findIndex(color => color.id === removeColorId);
                                 if (index < 0) return;
+                                const replacement = colorDraft.find(color => color.id !== removeColorId);
+                                if (!replacement && draft.some(mapping => mapping.color === removeColorId)) {
+                                    window.BackupAlerts.error("Color is in use", "Add another color or remove its source mappings before deleting it."); return;
+                                }
                                 const [removed] = colorDraft.splice(index, 1);
-                                const fallback = colorDraft[0];
-                                draft.forEach(mapping => { if (mapping.color === removed.id) mapping.color = fallback.id; });
-                                if (field("mapping-color").value === removed.id) field("mapping-color").value = fallback.id;
+                                draft.forEach(mapping => { if (Number(mapping.color) === removed.id) mapping.color = replacement.id; });
+                                if (Number(field("mapping-color").value) === removed.id) field("mapping-color").value = replacement?.id || "";
                                 renderColors();
                             }));
                         };
@@ -153,7 +164,7 @@
                             const name = nameInput.value.trim();
                             if (!name) return;
                             if (colorDraft.some(color => color.name.toLowerCase() === name.toLowerCase())) { window.BackupAlerts.error("Color already exists", "Choose a different color name."); return; }
-                            const id = window.crypto?.randomUUID ? window.crypto.randomUUID() : `color-${Date.now()}`;
+                            const id = makeId();
                             colorDraft.push({ id, name, value: valueInput.value.toLowerCase() });
                             renderColors();
                             field("mapping-color").value = id;
@@ -169,9 +180,10 @@
                     backdrop.querySelector('.mapping-cancel').addEventListener('click', close);
                     field('mapping-form').addEventListener('submit', event => {
                         event.preventDefault();
-                        const id = item.id || (window.crypto && window.crypto.randomUUID ? window.crypto.randomUUID() : 'mapping-' + Date.now());
-                        const next = { id, name: field('mapping-name').value.trim(), patterns: field('mapping-patterns').value.trim(), color: field('mapping-color').value, schedule: field('mapping-schedule').value, folder: field('mapping-folder').value.trim(), active: item.id ? item.active : true };
+                        const id = item.id || makeId();
+                        const next = { id, name: field('mapping-name').value.trim(), patterns: field('mapping-patterns').value.trim(), folder: field('mapping-folder').value.trim(), color: Number(field('mapping-color').value), schedule: field('mapping-schedule').value, active: item.id ? item.active : true };
                         if (!next.name || !next.patterns) return;
+                        if (!next.color) { window.BackupAlerts.error("Choose a marker color", "Add a marker color before saving this source."); return; }
                         const index = draft.findIndex(entry => entry.id === id);
                         if (index >= 0) draft[index] = { ...draft[index], ...next }; else draft.push(next);
                         close(); renderList();
@@ -183,17 +195,17 @@
                     const visible = draft.filter(item => `${item.name} ${item.patterns} ${item.folder}`.toLowerCase().includes(query));
                     list.innerHTML = visible.length ? visible.map(item => `<div class="mapping-row"><i class="file-group-dot ${escapeHtml(item.color)}" style="background-color:${escapeHtml(colorDraft.find(color => color.id === item.color)?.value || "#859297")}"></i><div><strong>${escapeHtml(item.name)}${item.active ? "" : " · Inactive"}</strong><small>${escapeHtml(item.patterns)}${item.schedule ? ` · ${escapeHtml(item.schedule)}` : ""}</small></div><button type="button" data-edit="${escapeHtml(item.id)}">Edit</button><button type="button" data-toggle="${escapeHtml(item.id)}">${item.active ? "Deactivate" : "Activate"}</button><button type="button" class="mapping-delete" data-delete="${escapeHtml(item.id)}">Delete</button></div>`).join("") : `<p class="mapping-note">No mappings match this search.</p>`;
                     list.querySelectorAll("[data-edit]").forEach(button => button.addEventListener("click", () => {
-                        const item = draft.find(entry => entry.id === button.dataset.edit); if (!item) return;
+                        const item = draft.find(entry => entry.id === Number(button.dataset.edit)); if (!item) return;
 
                         openEditor(item);
 
                     }));
                     list.querySelectorAll("[data-toggle]").forEach(button => button.addEventListener("click", () => {
-                        const item = draft.find(entry => entry.id === button.dataset.toggle); if (!item) return;
+                        const item = draft.find(entry => entry.id === Number(button.dataset.toggle)); if (!item) return;
                         item.active = !item.active; renderList();
                     }));
                     list.querySelectorAll("[data-delete]").forEach(button => button.addEventListener("click", () => {
-                        const item = draft.find(entry => entry.id === button.dataset.delete); if (!item) return;
+                        const item = draft.find(entry => entry.id === Number(button.dataset.delete)); if (!item) return;
                         const backdrop = document.createElement("div");
                         backdrop.className = "mapping-editor-backdrop mapping-delete-backdrop";
                         backdrop.innerHTML = '<section class="mapping-editor mapping-delete-dialog" role="dialog" aria-modal="true"><span class="mapping-delete-icon">!</span><h3>Delete this mapping?</h3><p>The mapping for <strong>' + escapeHtml(item.name) + '</strong> will be removed when you save these settings.</p><div class="mapping-editor-actions"><button type="button" class="mapping-cancel">Keep mapping</button><button type="button" class="mapping-confirm-delete">Delete mapping</button></div></section>';
@@ -248,12 +260,12 @@
                 renderList();
                 renderFormats();
             },
-            preConfirm: () => save(draft, formatDraft, targetDirectoryInput.value.trim(), colorDraft) || false
+            preConfirm: () => save(draft, formatDraft, targetDirectoryInput.value.trim(), colorDraft)
         });
-        if (result.isConfirmed) window.BackupAlerts.success("Settings saved", "These settings are saved in this browser.");
+        if (result.isConfirmed) window.BackupAlerts.success("Settings saved", "These settings are saved in SQL Server.");
         return result;
     };
-    window.BackupMappingStore = { getAll: () => mappings.map(item => ({ ...item })), getFormats: () => formats.map(item => ({ ...item })), getTargetDirectory: () => targetDirectory, getColor: id => colors.find(color => color.id === id)?.value || "#859297", resolve, openSettings };
+    window.BackupMappingStore = { ready: settingsReady, getLoadError: () => loadError, getAll: () => mappings.map(item => ({ ...item })), getFormats: () => formats.map(item => ({ ...item })), getStatuses: () => statuses.map(item => ({ ...item })), getTargetDirectory: () => targetDirectory, getColor: id => colors.find(color => color.id === id)?.value || "#859297", resolve, openSettings };
     document.addEventListener("DOMContentLoaded", () => document.getElementById("mapping-settings")?.addEventListener("click", openSettings));
 })();
 

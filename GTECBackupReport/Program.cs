@@ -1,5 +1,7 @@
 using Service.BackupMonitoring;
 using GTECBackupReport.Data;
+using Business.Interfaces;
+using DataAccess.Repositories;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 
@@ -14,7 +16,10 @@ builder.Services.AddDatabaseDeveloperPageExceptionFilter();
 builder.Services.AddDefaultIdentity<IdentityUser>(options => options.SignIn.RequireConfirmedAccount = true)
     .AddEntityFrameworkStores<ApplicationDbContext>();
 builder.Services.AddControllersWithViews();
+builder.Services.AddAntiforgery(options => options.HeaderName = "RequestVerificationToken");
 builder.Services.AddSingleton<IBackupDirectoryScanner, BackupDirectoryScanner>();
+builder.Services.AddScoped<IBackupSettingsRepository>(_ => new BackupSettingsRepository(connectionString));
+builder.Services.AddScoped<IBackupSettingsService, BackupSettingsService>();
 
 var app = builder.Build();
 

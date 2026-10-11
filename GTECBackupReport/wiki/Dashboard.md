@@ -6,6 +6,8 @@
 - **Monthly** shows the first day of the current month through today.
 - **Custom** initially shows January 1 of the current year through today; either date can be changed.
 
+The dashboard opens in Monthly view so files from earlier in the current month remain visible; select Weekly to narrow the report to the last seven days.
+
 ## Filters and search
 
 - **All databases** shows mapped database records and expected missing records, excluding unmapped files.
