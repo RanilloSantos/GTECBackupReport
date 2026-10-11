@@ -1,0 +1,11 @@
+# Visual Studio user files
+.vs/
+*.user
+*.suo
+*.vscode/
+
+# .NET generated output
+**/bin/
+**/obj/
+**/.build-check/
+TestResults/
