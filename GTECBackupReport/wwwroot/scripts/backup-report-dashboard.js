@@ -1,7 +1,7 @@
 (() => {
     const $ = id => document.getElementById(id);
     const ui = { rows: $("backup-rows"), search: $("search-term-input"), chips: $("search-terms"), source: $("source-filter"), status: $("status-filter"), format: $("format-filter"), from: $("date-from"), to: $("date-to"), range: $("date-control"), empty: $("empty-state"), emptyKicker: $("empty-kicker"), emptyTitle: $("empty-title"), emptyDescription: $("empty-description"), emptyClear: $("empty-clear"), size: $("page-size"), count: $("result-count"), summary: $("page-summary"), page: $("page-number"), prev: $("previous-page"), next: $("next-page"), periodText: $("period-summary"), printMeta: $("print-meta") };
-    const state = { period: "month", sort: "date", descending: true, page: 1, printing: false, searchTerms: [], scanError: null };
+    const state = { period: "week", sort: "date", descending: true, page: 1, printing: false, searchTerms: [], scanError: null };
     let scannedFiles = [];
     let allRows = [];
     const pad = n => String(n).padStart(2, "0");
@@ -138,19 +138,47 @@
     };
     const refreshSourceOptions=()=>{
         const current=ui.source.value, options=window.BackupMappingStore.getAll().filter(item=>item.active).map(item=>`<option value="${esc(item.name)}">${esc(item.name)}</option>`).join("");
-        ui.source.innerHTML=`<option value="">Select backup source</option><option value="all-databases">All databases</option><option value="all-files">All files</option>${options}<option value="unmapped-only">Unmapped</option>`;
-        ui.source.value=[...ui.source.options].some(option=>option.value===current)?current:"";
+        ui.source.innerHTML=`<option value="all-databases">All databases</option><option value="all-files">All files</option>${options}<option value="unmapped-only">Unmapped</option>`;
+        ui.source.value=[...ui.source.options].some(option=>option.value===current)?current:"all-databases";
     };
     const refreshFormatOptions=()=>{
         const current=ui.format.value, options=window.BackupMappingStore.getFormats().filter(item=>item.active).map(item=>`<option value="${esc(item.extension)}">${esc(item.extension)}</option>`).join("");
-        ui.format.innerHTML=`<option value="">Select file format</option>${options}`;
+        ui.format.innerHTML=`<option value="">All</option>${options}`;
         ui.format.value=[...ui.format.options].some(option=>option.value===current)?current:"";
     };
     const refreshStatusOptions=()=>{
         const current=ui.status.value, options=window.BackupMappingStore.getStatuses().map(item=>`<option value="${esc(item.value)}">${esc(item.label)}</option>`).join("");
-        ui.status.innerHTML=`<option value="">Select status</option>${options}`;
+        ui.status.innerHTML=`<option value="">All</option>${options}`;
         ui.status.value=[...ui.status.options].some(option=>option.value===current)?current:"";
     };
+
+    const defaultFilters=$("mapping-settings")?{period:"week",source:"all-databases",status:"",format:""}:null;
+    const applyDefaultFilters=()=>{
+        if(!defaultFilters)return;
+        state.period=["week","month","custom"].includes(defaultFilters.period)?defaultFilters.period:"week";
+        ui.range.hidden=state.period!=="custom";
+        if(state.period==="custom"&&!ui.from.value){const today=new Date();ui.from.value=key(new Date(today.getFullYear(),0,1));ui.to.value=key(today);}
+        document.querySelectorAll("[data-period]").forEach(button=>button.classList.toggle("active",button.dataset.period===state.period));
+        ui.source.value=[...ui.source.options].some(option=>option.value===defaultFilters.source)?defaultFilters.source:"all-databases";
+        ui.status.value=[...ui.status.options].some(option=>option.value===defaultFilters.status)?defaultFilters.status:"";
+        ui.format.value=[...ui.format.options].some(option=>option.value===defaultFilters.format)?defaultFilters.format:"";
+        state.page=1;
+        render();
+    };
+    const loadDefaultFilters=async()=>{
+        if(!defaultFilters)return;
+        try{
+            const response=await fetch("/api/backup-settings/default-filters",{credentials:"same-origin"});
+            if(!response.ok)throw new Error("Could not load your default report filters.");
+            Object.assign(defaultFilters,await response.json());
+            applyDefaultFilters();
+        }catch(error){window.BackupAlerts?.error("Default filters",error.message||"Could not load your default report filters.");}
+    };
+    window.addEventListener("backup:filter-defaults-changed",event=>{
+        if(!defaultFilters)return;
+        Object.assign(defaultFilters,event.detail||{});
+        applyDefaultFilters();
+    });
 
     document.querySelectorAll("[data-period]").forEach(button=>button.addEventListener("click",()=>{
         state.period=button.dataset.period;state.page=1;
@@ -170,20 +198,21 @@
     $("add-search-term").addEventListener("click",addSearchTerm);
     ui.search.addEventListener("keydown",event=>{if(event.key==="Enter"){event.preventDefault();addSearchTerm();}});
     const clear=()=>{
-        ui.search.value="";state.searchTerms=[];renderSearchTerms();ui.source.value="";ui.status.value="";ui.format.value="";ui.from.value="";ui.to.value="";
-        state.period="month";state.page=1;ui.range.hidden=true;
-        document.querySelectorAll("[data-period]").forEach(button=>button.classList.toggle("active",button.dataset.period==="month"));
+        ui.search.value="";state.searchTerms=[];renderSearchTerms();ui.source.value=defaultFilters?.source||"all-databases";ui.status.value=defaultFilters?.status||"";ui.format.value=defaultFilters?.format||"";ui.from.value="";ui.to.value="";
+        state.period=["week","month","custom"].includes(defaultFilters?.period)?defaultFilters.period:"week";state.page=1;ui.range.hidden=state.period!=="custom";
+        if(state.period==="custom"){const today=new Date();ui.from.value=key(new Date(today.getFullYear(),0,1));ui.to.value=key(today);}
+        document.querySelectorAll("[data-period]").forEach(button=>button.classList.toggle("active",button.dataset.period===state.period));
         render();
     };
     $("clear-filters").addEventListener("click",clear);$("empty-clear").addEventListener("click",clear);
     $("empty-open-settings")?.addEventListener("click",()=>$("mapping-settings")?.click());
     $("print-report").addEventListener("click",()=>{state.printing=true;render();window.print();});
     window.addEventListener("afterprint",()=>{state.printing=false;render();});
-    window.addEventListener("backup:mappings-changed",()=>{refreshSourceOptions();state.page=1;render();});
-    window.addEventListener("backup:formats-changed",()=>{refreshFormatOptions();state.page=1;render();});
-    window.addEventListener("backup:statuses-changed",refreshStatusOptions);
+    window.addEventListener("backup:mappings-changed",()=>{refreshSourceOptions();if(defaultFilters&&!([...ui.source.options].some(option=>option.value===defaultFilters.source)))defaultFilters.source="all-databases";state.page=1;render();});
+    window.addEventListener("backup:formats-changed",()=>{refreshFormatOptions();if(defaultFilters&&!([...ui.format.options].some(option=>option.value===defaultFilters.format)))defaultFilters.format="";state.page=1;render();});
+    window.addEventListener("backup:statuses-changed",()=>{refreshStatusOptions();if(defaultFilters&&!([...ui.status.options].some(option=>option.value===defaultFilters.status)))defaultFilters.status="";});
     window.addEventListener("backup:directory-changed",scanDirectory);
-    window.BackupMappingStore.ready.then(()=>{refreshSourceOptions();refreshStatusOptions();refreshFormatOptions();scanDirectory();});
+    window.BackupMappingStore.ready.then(()=>{refreshSourceOptions();refreshStatusOptions();refreshFormatOptions();applyDefaultFilters();scanDirectory();loadDefaultFilters();});
 })();
 
 

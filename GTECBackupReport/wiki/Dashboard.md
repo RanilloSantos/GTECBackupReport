@@ -6,7 +6,7 @@
 - **Monthly** shows the first day of the current month through today.
 - **Custom** initially shows January 1 of the current year through today; either date can be changed.
 
-The dashboard opens in Monthly view so files from earlier in the current month remain visible; select Weekly to narrow the report to the last seven days.
+The dashboard opens in Weekly view unless a signed-in user has saved a different default report period. Weekly covers the last seven days through today.
 
 ## Filters and search
 
@@ -14,6 +14,7 @@ The dashboard opens in Monthly view so files from earlier in the current month r
 - **All files** includes mapped, unmapped, and expected-missing records.
 - A database name or **Unmapped** narrows the report to that choice.
 - Status and file format filters can be combined with database filtering.
+- Signed-in users can choose their default period, source, status, and file format in the **Default filters** tab of Backup settings. Clear filters restores those saved defaults.
 - Add filename or path terms one at a time. A row matches any confirmed search term; remove a term with its x button.
 
 ## Table and actions

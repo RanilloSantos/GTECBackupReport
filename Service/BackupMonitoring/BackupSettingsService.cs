@@ -8,6 +8,14 @@ namespace Service.BackupMonitoring;
 
 public sealed class BackupSettingsService(IBackupSettingsRepository repository) : IBackupSettingsService
 {
+    private static readonly HashSet<string> BuiltInSources = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "all-databases", "all-files", "unmapped-only"
+    };
+    private static readonly HashSet<string> AllowedPeriods = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "week", "month", "custom"
+    };
     private static readonly HashSet<string> AllowedSchedules = new(StringComparer.OrdinalIgnoreCase)
     {
         "Daily", "Weekdays", "Weekly"
@@ -116,5 +124,58 @@ public sealed class BackupSettingsService(IBackupSettingsRepository repository) 
                 Value = color.Value.ToLowerInvariant()
             }).ToList()
         }, cancellationToken);
+    }
+
+    public async Task<BackupFilterDefaultsResponse> GetUserFilterDefaultsAsync(string userId, CancellationToken cancellationToken)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(userId);
+        var defaults = await repository.GetUserFilterDefaultsAsync(userId, cancellationToken);
+        var settings = await repository.GetBackupSettingsAsync(cancellationToken);
+        return NormalizeFilterDefaults(defaults, settings);
+    }
+
+    public async Task ReplaceUserFilterDefaultsAsync(string userId, ReplaceBackupFilterDefaultsRequest request, CancellationToken cancellationToken)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(userId);
+        ArgumentNullException.ThrowIfNull(request);
+        var period = (request.Period ?? string.Empty).Trim();
+        var source = (request.Source ?? string.Empty).Trim();
+        var status = (request.Status ?? string.Empty).Trim();
+        var format = (request.Format ?? string.Empty).Trim();
+        if (!AllowedPeriods.Contains(period))
+            throw new ArgumentException("Choose Weekly, Monthly, or Custom as the default report period.");
+        if (source.Length > 80 || status.Length > 32 || format.Length > 32)
+            throw new ArgumentException("A default filter value is too long.");
+
+        var settings = await repository.GetBackupSettingsAsync(cancellationToken);
+        var sourceIsValid = BuiltInSources.Contains(source) || settings.Sources.Any(item => item.Active && string.Equals(item.Name, source, StringComparison.OrdinalIgnoreCase));
+        var statusIsValid = status.Length == 0 || settings.Statuses.Any(item => string.Equals(item.Value, status, StringComparison.OrdinalIgnoreCase));
+        var formatIsValid = format.Length == 0 || settings.Formats.Any(item => item.Active && string.Equals(item.Extension, format, StringComparison.OrdinalIgnoreCase));
+        if (!sourceIsValid || !statusIsValid || !formatIsValid)
+            throw new ArgumentException("Choose default values from the available filter options.");
+
+        await repository.ReplaceUserFilterDefaultsAsync(userId, new BackupFilterDefaults
+        {
+            Period = period.ToLowerInvariant(),
+            Source = source,
+            Status = status,
+            Format = format
+        }, cancellationToken);
+    }
+
+    private static BackupFilterDefaultsResponse NormalizeFilterDefaults(BackupFilterDefaults defaults, BackupSettings settings)
+    {
+        var source = BuiltInSources.Contains(defaults.Source)
+            ? BuiltInSources.First(value => string.Equals(value, defaults.Source, StringComparison.OrdinalIgnoreCase))
+            : settings.Sources.FirstOrDefault(item => item.Active && string.Equals(item.Name, defaults.Source, StringComparison.OrdinalIgnoreCase))?.Name;
+        var status = settings.Statuses.FirstOrDefault(item => string.Equals(item.Value, defaults.Status, StringComparison.OrdinalIgnoreCase))?.Value ?? string.Empty;
+        var format = settings.Formats.FirstOrDefault(item => item.Active && string.Equals(item.Extension, defaults.Format, StringComparison.OrdinalIgnoreCase))?.Extension ?? string.Empty;
+        return new BackupFilterDefaultsResponse
+        {
+            Period = AllowedPeriods.Contains(defaults.Period) ? defaults.Period.ToLowerInvariant() : "week",
+            Source = source ?? "all-databases",
+            Status = status,
+            Format = format
+        };
     }
 }

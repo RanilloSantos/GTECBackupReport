@@ -10,7 +10,7 @@ Show which backup files are present in a configured directory and which expected
 - ASP.NET Core Identity accounts, roles, claims, and tokens persisted in SQL Server through EF Core (`ApplicationDbContext`). `Database/Scripts/IdentitySchema.sql` provisions the current Identity schema.
 - Authenticated recursive directory scan of files and subfolders. The scan reads metadata only, skips inaccessible/reparse-point paths, and returns up to 10,000 files.
 - Settings modal for target directory, database mappings, file formats, and marker colors. Shared settings are stored in SQL Server through Service, Business abstractions, Dapper repositories, and stored procedures.
-- Backup source, status, and file format filter options load from SQL Server; filters open with blank selections. New databases seed the standard statuses and active `.bak` format, while source mappings, marker colors, and target directory start empty.
+- Backup source, status, file format, and report period options load from SQL Server-backed settings. The dashboard opens Weekly with All databases, All statuses, and All formats selected. Signed-in users can set their own report period, source, status, and file format in the Default filters tab of Backup settings; those preferences are stored per Identity user in SQL Server.
 - Settings source and marker color IDs use compact integers. Existing databases can migrate them with `Database/Scripts/MigrateSettingsIdsToInt.sql`.
 - Settings use `MonitorSettings`, `MarkerColors`, `Sources`, `FileFormats`, and `Statuses` tables with `pr_Settings_Get` / `pr_Settings_Replace` procedures.
 - Mapping by filename wildcard patterns (`*`), optional subfolder scope, and Daily / Weekdays / Weekly schedules.
@@ -25,7 +25,7 @@ Day, Date, Database / Backup Source, File Name / Format, Status, and Details. Ba
 
 ## Current limits
 
-- Legacy browser-local settings are removed when each browser loads the updated page. Search terms and filter selections remain page-only state.
+- Legacy browser-local settings are removed when each browser loads the updated page. Search terms and current filter selections remain page-only state; signed-in users' saved initial filter defaults persist in SQL Server.
 - The selected path must be an absolute directory readable by the web server process. The authenticated scan request accepts a path from the browser; production use needs server-side path restrictions and role checks.
 - Expected No Backup rows can currently be generated before a scan succeeds, including when no directory is configured. Fix this before relying on missing-backup results.
 - Backup dates are currently based on file modified dates. Filename-specific date parsing is not implemented.

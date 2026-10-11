@@ -84,6 +84,7 @@
             <button class="settings-tab active" type="button" role="tab" aria-selected="true" aria-controls="directory-panel" data-settings-tab="directory">Target directory</button>
             <button class="settings-tab" type="button" role="tab" aria-selected="false" aria-controls="mappings-panel" data-settings-tab="mappings">Database mappings</button>
             <button class="settings-tab" type="button" role="tab" aria-selected="false" aria-controls="formats-panel" data-settings-tab="formats">File formats</button>
+            <button class="settings-tab" type="button" role="tab" aria-selected="false" aria-controls="defaults-panel" data-settings-tab="defaults">Default filters</button>
         </nav>
         <section class="settings-panel directory-panel" id="directory-panel" role="tabpanel" data-settings-panel="directory">
             <p class="mapping-note">Choose the server directory that contains your backup files. The scanner includes files in all subfolders.</p>
@@ -102,6 +103,17 @@
             <form class="format-add-form" id="format-add-form"><label for="format-new-input">Add a file extension</label><div><input id="format-new-input" type="text" placeholder="For example: .bak or .tar.gz" autocomplete="off"><button class="mapping-add" type="submit">Add format</button></div><small id="format-error" role="status"></small></form>
             <div class="format-list" id="format-list"></div>
             <p class="mapping-storage-note">File formats are stored in SQL Server and shared by signed-in users.</p>
+        </section>
+        <section class="settings-panel" id="defaults-panel" role="tabpanel" data-settings-panel="defaults" hidden>
+            <p class="mapping-note">Choose the report period, source, status, and file format selected when you open the dashboard. These defaults are personal to your account.</p>
+            <div class="filter-defaults-fields">
+                <label for="default-period">Report period<select id="default-period"><option value="week">Weekly</option><option value="month">Monthly</option><option value="custom">Custom</option></select></label>
+                <label for="default-source">Backup source<select id="default-source"></select></label>
+                <label for="default-status">Status<select id="default-status"></select></label>
+                <label for="default-format">File format<select id="default-format"></select></label>
+            </div>
+            <button class="mapping-add filter-defaults-save" id="save-filter-defaults" type="button">Save default filters</button>
+            <small class="filter-defaults-feedback" id="filter-defaults-feedback" role="status"></small>
         </section>`;
     const openSettings = async () => {
         if (!(await settingsReady)) { window.BackupAlerts.error("Settings unavailable", loadError || "Could not load settings from SQL Server."); return; }
@@ -249,6 +261,47 @@
                     if (formatDraft.some(item => item.extension.toLowerCase() === extension)) { formatError.textContent = "That extension is already configured."; return; }
                     formatDraft.push({ extension, active: true });
                     formatInput.value = ""; formatError.textContent = ""; renderFormats(); formatInput.focus();
+                });
+                const defaultsPeriod = $("default-period"), defaultsSource = $("default-source"), defaultsStatus = $("default-status"), defaultsFormat = $("default-format"), defaultsFeedback = $("filter-defaults-feedback");
+                defaultsSource.innerHTML = `<option value="all-databases">All databases</option><option value="all-files">All files</option>${mappings.filter(item => item.active).map(item => `<option value="${escapeHtml(item.name)}">${escapeHtml(item.name)}</option>`).join("")}<option value="unmapped-only">Unmapped</option>`;
+                defaultsStatus.innerHTML = `<option value="">All</option>${statuses.map(item => `<option value="${escapeHtml(item.value)}">${escapeHtml(item.label)}</option>`).join("")}`;
+                defaultsFormat.innerHTML = `<option value="">All</option>${formats.filter(item => item.active).map(item => `<option value="${escapeHtml(item.extension)}">${escapeHtml(item.extension)}</option>`).join("")}`;
+                fetch(`${settingsUrl}/default-filters`, { credentials: "same-origin" })
+                    .then(async response => {
+                        if (!response.ok) throw new Error("Could not load your saved default filters.");
+                        return response.json();
+                    })
+                    .then(defaults => {
+                        defaultsPeriod.value = defaults.period;
+                        defaultsSource.value = defaults.source;
+                        defaultsStatus.value = defaults.status;
+                        defaultsFormat.value = defaults.format;
+                    })
+                    .catch(error => { defaultsFeedback.textContent = error.message; });
+                $("save-filter-defaults").addEventListener("click", async event => {
+                    const button = event.currentTarget;
+                    const token = document.querySelector('input[name="__RequestVerificationToken"]')?.value;
+                    const defaults = { period: defaultsPeriod.value, source: defaultsSource.value, status: defaultsStatus.value, format: defaultsFormat.value };
+                    button.disabled = true;
+                    defaultsFeedback.textContent = "";
+                    try {
+                        const response = await fetch(`${settingsUrl}/default-filters`, {
+                            method: "PUT", credentials: "same-origin",
+                            headers: { "Content-Type": "application/json", "RequestVerificationToken": token || "" },
+                            body: JSON.stringify(defaults)
+                        });
+                        if (!response.ok) {
+                            const payload = await response.json().catch(() => ({}));
+                            throw new Error(payload.message || payload.detail || "Could not save your default filters.");
+                        }
+                        window.dispatchEvent(new CustomEvent("backup:filter-defaults-changed", { detail: defaults }));
+                        defaultsFeedback.textContent = "Your default filters have been saved.";
+                        window.BackupAlerts.success("Default filters saved", "These filters will be applied when you open the dashboard.");
+                    } catch (error) {
+                        defaultsFeedback.textContent = error.message || "Could not save your default filters.";
+                    } finally {
+                        button.disabled = false;
+                    }
                 });
                 popup.querySelectorAll("[data-settings-tab]").forEach(tab => tab.addEventListener("click", () => {
                     const active = tab.dataset.settingsTab;
