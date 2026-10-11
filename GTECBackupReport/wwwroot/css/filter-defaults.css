@@ -1,0 +1,8 @@
+.settings-panel .filter-defaults-fields{display:grid;gap:13px;margin:18px 0;text-align:left}
+.settings-panel .filter-defaults-fields label{display:grid;gap:6px;color:#52676f;font-size:12px;font-weight:700}
+.settings-panel .filter-defaults-fields select{width:100%;height:42px;padding:0 10px;border:1px solid #dce5e6;border-radius:6px;background:#fff;color:#29464f;font:inherit;font-size:13px}
+.settings-panel .filter-defaults-fields select:focus{outline:0;border-color:#0b8277;box-shadow:0 0 0 3px rgba(11,130,119,.1)}
+.filter-defaults-save{min-height:40px;padding:0 14px;border:0;border-radius:6px;background:#0b8277;color:#fff;font-size:12px;font-weight:700;cursor:pointer}
+.filter-defaults-save:hover{background:#07665f}
+.filter-defaults-save:disabled{opacity:.65;cursor:wait}
+.filter-defaults-feedback{display:block;min-height:16px;margin-top:9px;color:#70818a;font-size:11px}

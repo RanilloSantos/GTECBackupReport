@@ -11,6 +11,8 @@ public sealed class BackupSettingsRepository : IBackupSettingsRepository
 {
     private const string GetProcedure = "dbo.pr_Settings_Get";
     private const string ReplaceProcedure = "dbo.pr_Settings_Replace";
+    private const string GetUserFilterDefaultsProcedure = "dbo.pr_UserFilterDefaults_Get";
+    private const string ReplaceUserFilterDefaultsProcedure = "dbo.pr_UserFilterDefaults_Replace";
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
     private readonly string _connectionString;
 
@@ -51,6 +53,23 @@ public sealed class BackupSettingsRepository : IBackupSettingsRepository
         await using var connection = new SqlConnection(_connectionString);
         await connection.OpenAsync(cancellationToken);
         var command = new CommandDefinition(ReplaceProcedure, parameters, commandType: CommandType.StoredProcedure, cancellationToken: cancellationToken);
+        await connection.ExecuteAsync(command);
+    }
+
+    public async Task<BackupFilterDefaults> GetUserFilterDefaultsAsync(string userId, CancellationToken cancellationToken)
+    {
+        await using var connection = new SqlConnection(_connectionString);
+        await connection.OpenAsync(cancellationToken);
+        var command = new CommandDefinition(GetUserFilterDefaultsProcedure, new { UserId = userId }, commandType: CommandType.StoredProcedure, cancellationToken: cancellationToken);
+        return await connection.QuerySingleAsync<BackupFilterDefaults>(command);
+    }
+
+    public async Task ReplaceUserFilterDefaultsAsync(string userId, BackupFilterDefaults defaults, CancellationToken cancellationToken)
+    {
+        var parameters = new { UserId = userId, defaults.Period, defaults.Source, defaults.Status, defaults.Format };
+        await using var connection = new SqlConnection(_connectionString);
+        await connection.OpenAsync(cancellationToken);
+        var command = new CommandDefinition(ReplaceUserFilterDefaultsProcedure, parameters, commandType: CommandType.StoredProcedure, cancellationToken: cancellationToken);
         await connection.ExecuteAsync(command);
     }
 }

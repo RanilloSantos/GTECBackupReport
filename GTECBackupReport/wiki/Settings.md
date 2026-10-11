@@ -18,9 +18,13 @@ Settings are stored in the `MonitorSettings`, `MarkerColors`, `Sources`, `FileFo
 
 When multiple active mappings match a file, the file is treated as Unmapped for review.
 
+## Personal default filters
+
+Signed-in users can choose **Default filters** in Backup settings. Set the initial report period (Weekly, Monthly, or Custom), backup source, status, and file format; the saved values are personal to that account and load when the dashboard opens. Apply `Database/Scripts/UserFilterDefaults.sql` in `GTECBackupMonitor` after the Identity schema is installed. The script can also be rerun to add the report period to an existing preferences table.
+
 ## File formats
 
-Add or remove extensions and choose whether each appears in the File format filter. The directory scan still discovers all file types, including unconfigured extensions. Formats are stored in SQL Server; a new database starts with `.bak` active. The Backup source, Status, and File format filters initially show a blank prompt.
+Add or remove extensions and choose whether each appears in the File format filter. The directory scan still discovers all file types, including unconfigured extensions. Formats are stored in SQL Server; a new database starts with `.bak` active. The Status and File format filters have an **All** option.
 
 ## Marker colors
 

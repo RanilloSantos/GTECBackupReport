@@ -56,13 +56,13 @@
     <header class="panel-heading"><div class="panel-title"><div class="panel-title-row"><h2>Backup records</h2>@if (SignInManager.IsSignedIn(User)) {
     <button class="icon-button" id="mapping-settings" type="button" aria-label="Database mapping settings" title="Database mappings"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 8.2a3.8 3.8 0 1 0 0 7.6 3.8 3.8 0 0 0 0-7.6Zm9 4.8v-2l-2.1-.6a7.2 7.2 0 0 0-.7-1.7l1.1-1.9-1.4-1.4-1.9 1.1a7.2 7.2 0 0 0-1.7-.7L13.7 3h-2l-.6 2.1a7.2 7.2 0 0 0-1.7.7L7.5 4.7 6.1 6.1l1.1 1.9a7.2 7.2 0 0 0-.7 1.7L4.4 10.3v2l2.1.6a7.2 7.2 0 0 0 .7 1.7l-1.1 1.9 1.4 1.4 1.9-1.1a7.2 7.2 0 0 0 1.7.7l.6 2.1h2l.6-2.1a7.2 7.2 0 0 0 1.7-.7l1.9 1.1 1.4-1.4-1.1-1.9a7.2 7.2 0 0 0 .7-1.7l2.1-.6Z"/></svg></button>
 }</div>
-        <p id="period-summary">Monthly report</p></div>
+        <p id="period-summary">Weekly report</p></div>
         <span class="count-pill" id="result-count">0 records</span>
     </header>
 <div class="report-controls">
     <div class="period-tabs" role="group" aria-label="Report period">
-        <button data-period="week" type="button">Weekly</button>
-        <button class="active" data-period="month" type="button">Monthly</button>
+        <button class="active" data-period="week" type="button">Weekly</button>
+        <button data-period="month" type="button">Monthly</button>
         <button data-period="custom" type="button">Custom</button>
     </div>
     <label class="filter date-control" id="date-control" hidden>
@@ -75,19 +75,18 @@
     <label class="filter">
         <span>Backup source</span>
         <select id="source-filter">
-            <option value="" selected>Select backup source</option>
-            <option value="all-databases">All databases</option>
+            <option value="all-databases" selected>All databases</option>
             <option value="all-files">All files</option>
             <option value="unmapped-only">Unmapped</option>
         </select></label><label class="filter">
             <span>Status</span>
             <select id="status-filter">
-                <option value="" selected>Select status</option>
+                <option value="" selected>All</option>
             </select></label>
             <label class="filter">
                 <span>File format</span>
                 <select id="format-filter">
-                    <option value="" selected>Select file format</option>
+                    <option value="" selected>All</option>
                 </select>
             </label>
             <div class="filter search-filter"><span>Filename or prefix</span><div class="search-entry"><div class="search-terms" id="search-terms" aria-label="Active search terms"></div><input id="search-term-input" type="search" placeholder="Search filename or prefix" aria-label="Filename or prefix"><button id="add-search-term" type="button" aria-label="Add search term" title="Add search term"><span aria-hidden="true">&#10003;</span></button></div></div>

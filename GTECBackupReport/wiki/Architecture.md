@@ -27,6 +27,8 @@ Dashboard JavaScript
 
 Backup settings load from SQL Server. For an authenticated scan, the browser sends the configured root path to the scan endpoint. The scan returns file name, relative path, extension, modified date, and modified timestamp. It caps results at 10,000 files and does not read file contents.
 
+Signed-in users load and save personal default report filters through `BackupSettingsController` and the `pr_UserFilterDefaults_Get` / `pr_UserFilterDefaults_Replace` stored procedures. Apply [`Database/Scripts/UserFilterDefaults.sql`](../Database/Scripts/UserFilterDefaults.sql) after the Identity schema exists.
+
 ## Settings flow
 
 ```text
