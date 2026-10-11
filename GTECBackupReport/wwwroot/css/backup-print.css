@@ -1,0 +1,13 @@
+@media print {
+    .print-meta {
+        display: block !important;
+        text-align: right;
+        font-weight: 700;
+    }
+
+    .database-group-dot {
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+        forced-color-adjust: none;
+    }
+}
